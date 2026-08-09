@@ -9,6 +9,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.analytics import host_summary, router as analytics_router, trends, triggers
 from app.documentation import documentation, router as documentation_router
 from app.drafts import router as drafts_router
+from app.overview import router as overview_router
 from app.host_analysis import (
     gpu_brief,
     gpu_summary,
@@ -20,11 +21,12 @@ from app.host_analysis import (
 from app.zabbix import ConfigurationError, ZabbixAPIError, ZabbixClient
 
 
-app = FastAPI(title="Donkey Zabbix Tools", version="0.3.0")
+app = FastAPI(title="Donkey Zabbix Tools", version="0.4.0")
 app.include_router(analytics_router)
 app.include_router(documentation_router)
 app.include_router(drafts_router)
 app.include_router(host_analysis_router)
+app.include_router(overview_router)
 
 
 def error_response(status_code: int, code: str, message: str) -> JSONResponse:
