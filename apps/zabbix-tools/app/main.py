@@ -9,6 +9,13 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.analytics import host_summary, router as analytics_router, trends, triggers
 from app.documentation import documentation, router as documentation_router
 from app.drafts import router as drafts_router
+from app.host_analysis import (
+    gpu_summary,
+    host_period_summary,
+    host_search,
+    router as host_analysis_router,
+    traffic_summary,
+)
 from app.zabbix import ConfigurationError, ZabbixAPIError, ZabbixClient
 
 
@@ -16,6 +23,7 @@ app = FastAPI(title="Donkey Zabbix Tools", version="0.3.0")
 app.include_router(analytics_router)
 app.include_router(documentation_router)
 app.include_router(drafts_router)
+app.include_router(host_analysis_router)
 
 
 def error_response(status_code: int, code: str, message: str) -> JSONResponse:
@@ -225,6 +233,8 @@ async def history(
         description="Zabbix value_type returned by item search",
     ),
     limit: int = Query(100, ge=1, le=1000),
+    hours: int = Query(24, ge=1, le=168),
+    item_key: str = "",
 ) -> dict[str, Any]:
     data = await ZabbixClient().call(
         "history.get",
@@ -246,7 +256,7 @@ async def history(
     summary="Stable read-only gateway for Zabbix data and documentation",
 )
 async def read_zabbix(
-    action: str = Query(..., pattern=r"^(hosts|problems|items|history|host_summary|triggers|trends|documentation)$"),
+    action: str = Query(..., pattern=r"^(capabilities|hosts|problems|items|history|host_summary|host_search|host_24h_summary|gpu_summary|traffic_summary|triggers|trends|documentation)$"),
     query: str = "",
     hostid: str = "",
     itemid: str = "",
@@ -256,6 +266,34 @@ async def read_zabbix(
     limit: int = Query(100, ge=1, le=1000),
 ) -> dict[str, Any]:
     """Dispatch only explicitly allowlisted read operations."""
+    if action == "capabilities":
+        return {
+            "read_only": True,
+            "actions": {
+                "hosts": "List hosts.",
+                "host_search": "Search hosts by technical or visible name using query.",
+                "host_summary": "Operational inventory summary using numeric hostid.",
+                "host_24h_summary": "CPU, memory, disk, network and recent-problem statistics; use query for host name or ID.",
+                "gpu_summary": "GPU values and period statistics; use query for host name or ID.",
+                "traffic_summary": "Parse a JSON traffic item; use query for host name or ID and optional item_key.",
+                "problems": "List current and recent problems.",
+                "items": "Find items by query and optional hostid.",
+                "history": "Read raw history using itemid and history value type.",
+                "triggers": "Read problem triggers for numeric hostid.",
+                "trends": "Read aggregated trends for numeric itemid.",
+                "documentation": "Read an official Zabbix 8.0 manual path supplied in query.",
+            },
+        }
+    if action == "host_search":
+        if not query:
+            raise HTTPException(status_code=422, detail="host_search requires query")
+        return await host_search(query=query, limit=min(limit, 100))
+    if action == "host_24h_summary":
+        return await host_period_summary(host=query or hostid, hours=hours, items_per_category=min(20, max(1, limit // 20)))
+    if action == "gpu_summary":
+        return await gpu_summary(host=query or hostid, hours=hours)
+    if action == "traffic_summary":
+        return await traffic_summary(host=query or hostid, item_key=item_key)
     if action == "hosts":
         return await hosts(limit=min(limit, 1000))
     if action == "problems":
