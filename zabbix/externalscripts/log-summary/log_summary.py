@@ -31,7 +31,7 @@ RULES = {
     "ssh_invalid_user": (r"sshd.*Invalid user", 2),
     "sudo_auth_failure": (r"sudo:.*authentication failure", 5),
     "audit_avc_denied": (r"\btype=AVC\b.*\bdenied\b", 2),
-    "audit_anomaly": (r"\btype=ANOM_[A-Z_]+\b", 8),
+    "audit_anom": (r"\btype=ANOM_[A-Z_]+\b", 8),
     "firewall_denied": (r"\b(denied|reject|drop)\b", 1),
     "kernel_io_error": (r"I/O error|blk_update_request|Buffer I/O error", 20),
     "filesystem_error": (r"EXT4-fs error|XFS.*Corruption|filesystem read-only", 25),
@@ -41,13 +41,20 @@ RULES = {
     "network_error": (r"No route to host|Network is unreachable|connection timed out|link is down", 5),
     "cron_missing_script": (r"No such file or directory", 8),
     "cron_permission_denied": (r"Permission denied", 8),
-    "repository_error": (r"Cannot download|Failed to download|Curl error|GPG error", 3),
+    "repo_error": (r"Cannot download|Failed to download|Curl error|GPG error", 3),
+    "dnf_traceback": (r"Traceback \(most recent call last\):", 5),
     "nginx_5xx": (r'"\s5\d\d\s', 2),
     "nginx_upstream_error": (r"upstream timed out|connect\(\) failed|no live upstreams", 6),
     "php_fatal": (r"PHP Fatal error", 6),
+    "custom_connection_problem": (r"connection refused|failed to connect|name resolution", 4),
+    "custom_error": (r"\bERROR\b|Traceback|fatal:", 5),
     "zabbix_unsupported": (r"unsupported item key|not supported", 2),
     "zabbix_database_problem": (r"cannot connect to database|database is down", 15),
     "zabbix_queue_problem": (r"queue.*seconds behind", 8),
+    "zabbix_active_checks_error": (r"cannot send list of active checks|host \[.*\] not found", 6),
+    "zabbix_allowed_hosts_reject": (r'connection from ".*" rejected, allowed hosts:', 3),
+    "zabbix_permission_denied": (r"zabbix.*Permission denied|Permission denied.*zabbix", 8),
+    "zabbix_sender_failed": (r"zabbix_sender failed rc=\d+", 6),
 }
 COMPILED = {name: (re.compile(pattern, re.I), weight) for name, (pattern, weight) in RULES.items()}
 
@@ -191,7 +198,10 @@ def run(args: argparse.Namespace) -> int:
         file_results.append({"path": str(path), "new_lines_analyzed": len(lines), "dropped_lines": dropped, "counts": dict(counts), "top_unmatched": [{"message": text, "count": count} for text, count in samples.most_common(3)]})
 
     severity_score = score(totals)
-    breach = bool(totals["audit_anomaly"] or (totals["ssh_failed_password"] >= 20 and totals["ssh_invalid_user"] >= 5))
+    breach = bool(totals["audit_anom"] or (totals["ssh_failed_password"] >= 20 and totals["ssh_invalid_user"] >= 5))
+    attack_type = "audit_anomaly" if totals["audit_anom"] else "ssh_bruteforce" if breach else "none"
+    stable_counts = {name: int(totals.get(name, 0)) for name in RULES}
+    stable_counts["self_noise_ignored"] = int(totals.get("self_noise_ignored", 0))
     result = {
         "schema": "donkey_log_summary_v2",
         "generated_at": utc_now(),
@@ -203,7 +213,9 @@ def run(args: argparse.Namespace) -> int:
         "severity_score": severity_score,
         "severity_label": label(severity_score),
         "breach_suspected": breach,
-        "counts_flat": dict(totals),
+        "attack_type": attack_type,
+        "summary_text": deterministic_summary(totals),
+        "counts_flat": stable_counts,
         "files": file_results,
     }
     fallback = deterministic_summary(totals)
