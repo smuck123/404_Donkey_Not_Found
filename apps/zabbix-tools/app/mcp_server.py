@@ -11,10 +11,12 @@ BASE_URL = os.getenv("ZABBIX_TOOLS_URL", "http://127.0.0.1:8889").rstrip("/")
 TIMEOUT = httpx.Timeout(15.0, connect=3.0)
 MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
 MCP_PORT = int(os.getenv("MCP_PORT", "8001"))
-DEFAULT_FIREWALL_ZABBIX_HOST = os.getenv("FORTIGATE_ZABBIX_HOST", "himabot").strip()
-DEFAULT_TRAFFIC_ITEM_KEY = os.getenv(
-    "ZABBIX_TRAFFIC_ITEM_KEY", "fortigate_summary.sh"
-).strip()
+DEFAULT_FIREWALL_ZABBIX_HOST = (
+    os.getenv("FORTIGATE_ZABBIX_HOST", "").strip() or "himabot"
+)
+DEFAULT_TRAFFIC_ITEM_KEY = (
+    os.getenv("ZABBIX_TRAFFIC_ITEM_KEY", "").strip() or "fortigate_summary.sh"
+)
 
 # FastMCP 1.x configures its bind address when the server is created.
 # FastMCP.run() only selects the transport and does not accept host/port.
