@@ -1,0 +1,1 @@
+* * * * * root /usr/local/bin/send_fortigate_soc_summary.sh >> /var/log/fortigate-soc-summary.log 2>&1
