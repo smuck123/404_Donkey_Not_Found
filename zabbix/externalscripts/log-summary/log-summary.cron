@@ -1,0 +1,2 @@
+*/5 * * * * root /usr/local/bin/send_log_summary.sh >> /var/log/404-donkey-log-summary.log 2>&1
+
