@@ -1,4 +1,6 @@
 import os
+from collections import Counter
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -185,6 +187,99 @@ async def read_zabbix_documentation(path: str, max_chars: int = 12000) -> dict[s
         query=path,
         limit=max(5, min(max_chars // 200, 250)),
     )
+
+
+async def _estate_summary(limit: int = 500) -> dict[str, Any]:
+    hosts_result = await _get("/hosts", {"limit": max(1, min(limit, 1000))})
+    problems_result = await _get("/problems", {"limit": 200})
+    hosts = hosts_result.get("data", [])
+    problems = problems_result.get("data", [])
+
+    enabled = [host for host in hosts if host.get("enabled") is True]
+    disabled = [host for host in hosts if host.get("enabled") is False]
+    unavailable = []
+    for host in enabled:
+        interfaces = host.get("interfaces", []) or []
+        if interfaces and all(str(interface.get("available", "")) == "2" for interface in interfaces):
+            unavailable.append({
+                "hostid": host.get("hostid"),
+                "host": host.get("host"),
+                "name": host.get("name"),
+                "interface_errors": [
+                    interface.get("error")
+                    for interface in interfaces
+                    if interface.get("error")
+                ],
+            })
+
+    severity_counts = Counter(str(problem.get("severity", "0")) for problem in problems)
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "hosts": {
+            "total": len(hosts),
+            "enabled": len(enabled),
+            "disabled": len(disabled),
+            "unavailable": len(unavailable),
+            "unavailable_hosts": unavailable[:20],
+        },
+        "problems": {
+            "total": len(problems),
+            "by_severity": dict(sorted(severity_counts.items())),
+            "top": problems[:10],
+        },
+    }
+
+
+@mcp.tool()
+async def get_estate_summary(limit: int = 500) -> dict[str, Any]:
+    """Summarize total, enabled, disabled and unavailable hosts plus active problems."""
+    return await _estate_summary(limit)
+
+
+@mcp.tool()
+async def get_morning_report(hosts: str = "", hours: int = 24) -> dict[str, Any]:
+    """Collect a concise morning operations report for comma-separated host names."""
+    requested_hosts = [
+        value.strip()
+        for value in hosts.split(",")
+        if value.strip()
+    ][:20]
+    period_hours = max(1, min(hours, 168))
+    estate = await _estate_summary()
+
+    host_reports = []
+    for host in requested_hosts:
+        report: dict[str, Any] = {"requested_host": host}
+        try:
+            report["overview"] = await _get("/overview", {"host": host})
+            report["period"] = await _read(
+                "host_24h_summary",
+                query=host,
+                hours=period_hours,
+            )
+        except (httpx.HTTPError, ValueError) as exc:
+            report["error"] = str(exc)
+        host_reports.append(report)
+
+    gpu = None
+    if requested_hosts:
+        try:
+            gpu = await _read("gpu_brief", query=",".join(requested_hosts))
+        except (httpx.HTTPError, ValueError) as exc:
+            gpu = {"error": str(exc)}
+
+    return {
+        "response_style": (
+            "Morning report. Start with overall status. Use at most 8 bullets. "
+            "Prioritize new or active problems, unavailable hosts, stale data, "
+            "and meaningful 24-hour changes. Do not list normal low-value details."
+        ),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "period_hours": period_hours,
+        "estate": estate,
+        "hosts": host_reports,
+        "gpu": gpu,
+    }
 
 
 if __name__ == "__main__":
