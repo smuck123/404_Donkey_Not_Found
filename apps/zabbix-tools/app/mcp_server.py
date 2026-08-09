@@ -144,6 +144,17 @@ async def get_gpu_summary(host: str, hours: int = 24) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def get_internet_traffic_summary(
+    host: str = "fw1.kivela.work",
+) -> dict[str, Any]:
+    """Summarize inbound and outbound Internet traffic from FortiGate SOC data in Zabbix."""
+    return await _read(
+        "internet_traffic_summary",
+        query=host.strip() or "fw1.kivela.work",
+    )
+
+
+@mcp.tool()
 async def get_traffic_summary(host: str = "", item_key: str = "") -> dict[str, Any]:
     """Get collected FortiGate traffic; defaults to the configured firewall host."""
     selected_host = host.strip() or DEFAULT_FIREWALL_ZABBIX_HOST
