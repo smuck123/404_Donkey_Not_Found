@@ -231,6 +231,27 @@ async def _estate_summary(limit: int = 500) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def get_fortigate_summary() -> dict[str, Any]:
+    """Get current read-only FortiGate device, interface, policy, route and VPN summary."""
+    return await _get("/fortigate/summary")
+
+
+@mcp.tool()
+async def get_fortigate_traffic(count: int = 500) -> dict[str, Any]:
+    """Summarize current FortiGate sessions, top talkers, services and policies."""
+    return await _get(
+        "/fortigate/traffic-summary",
+        {"count": max(1, min(count, 5000)), "ip_version": "ipv4"},
+    )
+
+
+@mcp.tool()
+async def get_fortigate_vpn_summary() -> dict[str, Any]:
+    """Get the current read-only FortiGate IPsec configuration summary."""
+    return await _get("/fortigate/vpn-summary")
+
+
+@mcp.tool()
 async def get_estate_summary(limit: int = 500) -> dict[str, Any]:
     """Summarize total, enabled, disabled and unavailable hosts plus active problems."""
     return await _estate_summary(limit)
@@ -283,7 +304,13 @@ async def get_morning_report(
     traffic = None
     if firewall_host.strip():
         try:
-            traffic = await _read("traffic_summary", query=firewall_host.strip())
+            traffic = {
+                "configuration": await _get("/fortigate/summary"),
+                "sessions": await _get(
+                    "/fortigate/traffic-summary",
+                    {"count": 500, "ip_version": "ipv4"},
+                ),
+            }
         except (httpx.HTTPError, ValueError) as exc:
             traffic = {"error": str(exc)}
 
