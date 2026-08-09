@@ -239,7 +239,8 @@ def main() -> int:
         separators=None if args.pretty else (",", ":"),
     )
     sys.stdout.write("\n")
-    return 0 if result["collection_status"] != "failed" else 1
+    # A valid failure payload must still reach Zabbix so its status trigger can fire.
+    return 0
 
 
 if __name__ == "__main__":
