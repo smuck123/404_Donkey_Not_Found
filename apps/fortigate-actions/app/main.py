@@ -309,7 +309,7 @@ async def preview_user_action(request: UserPreviewRequest) -> dict:
     objects = USER_OBJECTS[request.subject]
     with database() as connection:
         connection.execute(
-            "INSERT INTO user_proposals VALUES (?,?,?,?,?,?,?,?,?,'pending',NULL,NULL,NULL)",
+            "INSERT INTO user_proposals VALUES (?,?,?,?,?,?,?,?,'pending',NULL,NULL,NULL)",
             (
                 proposal_id,
                 code,
