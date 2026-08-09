@@ -67,6 +67,7 @@ services:
       TZ: ${TZ:-Europe/Helsinki}
     volumes:
       - openclaw-state:/home/node/.openclaw
+      - ./config/openclaw/AGENTS.md:/home/node/.openclaw/workspace/AGENTS.md:ro
     cap_drop:
       - NET_RAW
       - NET_ADMIN
@@ -109,6 +110,7 @@ services:
       TZ: ${TZ:-Europe/Helsinki}
     volumes:
       - openclaw-state:/home/node/.openclaw
+      - ./config/openclaw/AGENTS.md:/home/node/.openclaw/workspace/AGENTS.md:ro
     cap_drop:
       - NET_RAW
       - NET_ADMIN
