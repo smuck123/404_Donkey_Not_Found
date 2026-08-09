@@ -237,8 +237,12 @@ async def get_estate_summary(limit: int = 500) -> dict[str, Any]:
 
 
 @mcp.tool()
-async def get_morning_report(hosts: str = "", hours: int = 24) -> dict[str, Any]:
-    """Collect a concise morning operations report for comma-separated host names."""
+async def get_morning_report(
+    hosts: str = "",
+    hours: int = 24,
+    firewall_host: str = "",
+) -> dict[str, Any]:
+    """Collect a concise morning report, with optional FortiGate traffic data."""
     requested_hosts = [
         value.strip()
         for value in hosts.split(",")
@@ -252,6 +256,14 @@ async def get_morning_report(hosts: str = "", hours: int = 24) -> dict[str, Any]
         report: dict[str, Any] = {"requested_host": host}
         try:
             report["overview"] = await _get("/overview", {"host": host})
+            host_info = report["overview"].get("host", {})
+            hostid = str(host_info.get("hostid", ""))
+            if hostid.isdigit():
+                log_items = await _get(
+                    "/items",
+                    {"query": "log.summary", "hostid": hostid, "limit": 10},
+                )
+                report["log_summaries"] = log_items.get("data", [])
             report["period"] = await _read(
                 "host_24h_summary",
                 query=host,
@@ -268,6 +280,13 @@ async def get_morning_report(hosts: str = "", hours: int = 24) -> dict[str, Any]
         except (httpx.HTTPError, ValueError) as exc:
             gpu = {"error": str(exc)}
 
+    traffic = None
+    if firewall_host.strip():
+        try:
+            traffic = await _read("traffic_summary", query=firewall_host.strip())
+        except (httpx.HTTPError, ValueError) as exc:
+            traffic = {"error": str(exc)}
+
     return {
         "response_style": (
             "Morning report. Start with overall status. Use at most 8 bullets. "
@@ -279,6 +298,7 @@ async def get_morning_report(hosts: str = "", hours: int = 24) -> dict[str, Any]
         "estate": estate,
         "hosts": host_reports,
         "gpu": gpu,
+        "traffic": traffic,
     }
 
 
