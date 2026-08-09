@@ -25,7 +25,8 @@ mcp = FastMCP(
     instructions=(
         "Read-only Zabbix tools. Prefer get_host_overview for general health questions. "
         "Use get_gpu_brief for current GPU questions and get_host_24h_summary for period summaries. "
-        "Never infer enabled/disabled state from raw numeric codes."
+        "Use get_fortigate_zabbix_brief for FortiGate values collected through Zabbix. "
+        "Never infer enabled/disabled state from raw numeric codes or treat missing values as zero."
     ),
     host=MCP_HOST,
     port=MCP_PORT,
@@ -238,6 +239,14 @@ async def _estate_summary(limit: int = 500) -> dict[str, Any]:
             "top": problems[:10],
         },
     }
+
+
+@mcp.tool()
+async def get_fortigate_zabbix_brief(
+    host: str = "fw1.kivela.work",
+) -> dict[str, Any]:
+    """Get validated FortiGate health and performance values collected through Zabbix."""
+    return await _read("fortigate_api_brief", query=host.strip() or "fw1.kivela.work")
 
 
 @mcp.tool()
