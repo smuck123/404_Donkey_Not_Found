@@ -27,7 +27,9 @@ Verify that `ZABBIX_HOST` is the exact Zabbix technical host name and that
 Preview the structured data without sending:
 
 ```bash
+set -a
 source /etc/sysconfig/404-donkey-fortigate-soc-summary
+set +a
 /usr/local/bin/fortigate_soc_summary.py --pretty
 ```
 
