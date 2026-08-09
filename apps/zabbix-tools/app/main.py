@@ -8,7 +8,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.zabbix import ConfigurationError, ZabbixAPIError, ZabbixClient
 
 
-app = FastAPI(title="Donkey Zabbix Tools", version="0.1.0")
+app = FastAPI(title="Donkey Zabbix Tools", version="0.2.0")
 
 
 def error_response(status_code: int, code: str, message: str) -> JSONResponse:
@@ -51,6 +51,29 @@ def result(data: list[dict[str, Any]]) -> dict[str, Any]:
     return {"count": len(data), "data": data}
 
 
+def normalize_host(host: dict[str, Any]) -> dict[str, Any]:
+    raw_status = str(host.get("status", ""))
+    monitored = raw_status == "0"
+    return {
+        **host,
+        "status_code": int(raw_status) if raw_status.isdigit() else raw_status,
+        "status_label": "enabled" if monitored else "disabled",
+        "monitored": monitored,
+        "enabled": monitored,
+    }
+
+
+def normalize_item(item: dict[str, Any]) -> dict[str, Any]:
+    raw_status = str(item.get("status", ""))
+    enabled = raw_status == "0"
+    return {
+        **item,
+        "status_code": int(raw_status) if raw_status.isdigit() else raw_status,
+        "status_label": "enabled" if enabled else "disabled",
+        "enabled": enabled,
+    }
+
+
 @app.get("/health", include_in_schema=False)
 async def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -86,11 +109,12 @@ async def problems(limit: int = Query(50, ge=1, le=500)) -> dict[str, Any]:
 @app.get(
     "/hosts",
     operation_id="get_zabbix_hosts",
-    summary="List monitored Zabbix hosts",
+    summary="List monitored and disabled Zabbix hosts",
     description=(
-        "Return hosts monitored by Zabbix, including host IDs, names, enabled "
-        "status, and network interfaces. Use this tool to list, count, find, "
-        "or identify monitored servers and devices. This operation is read-only."
+        "Return Zabbix hosts with explicit enabled, monitored, and status_label "
+        "fields. Zabbix raw status 0 means enabled/monitored and raw status 1 "
+        "means disabled/unmonitored. Use the explicit fields instead of guessing "
+        "from the raw status value. This operation is read-only."
     ),
 )
 async def hosts(limit: int = Query(100, ge=1, le=1000)) -> dict[str, Any]:
@@ -98,12 +122,75 @@ async def hosts(limit: int = Query(100, ge=1, le=1000)) -> dict[str, Any]:
         "host.get",
         {
             "output": ["hostid", "host", "name", "status"],
-            "selectInterfaces": ["interfaceid", "ip", "dns", "port", "main", "type"],
+            "selectInterfaces": [
+                "interfaceid",
+                "ip",
+                "dns",
+                "port",
+                "main",
+                "type",
+                "available",
+                "error",
+            ],
             "sortfield": "name",
             "limit": limit,
         },
     )
-    return result(data)
+    return result([normalize_host(host) for host in data])
+
+
+@app.get(
+    "/items",
+    operation_id="get_zabbix_items",
+    summary="Find Zabbix items and numeric item IDs",
+    description=(
+        "Find Zabbix items before requesting history. Search by item name or key "
+        "and optionally restrict results to a numeric host ID. The response "
+        "contains itemid, key_, value_type, units, and recent value fields. Pass "
+        "the returned numeric itemid and value_type to the history tool. This "
+        "operation is read-only."
+    ),
+)
+async def items(
+    query: str | None = Query(
+        None,
+        min_length=1,
+        max_length=255,
+        description="Text contained in the item name or key, for example fgSysSesCount",
+    ),
+    hostid: str | None = Query(
+        None,
+        min_length=1,
+        description="Optional numeric Zabbix host ID",
+    ),
+    limit: int = Query(100, ge=1, le=500),
+) -> dict[str, Any]:
+    params: dict[str, Any] = {
+        "output": [
+            "itemid",
+            "hostid",
+            "name",
+            "key_",
+            "value_type",
+            "status",
+            "state",
+            "lastvalue",
+            "lastclock",
+            "units",
+        ],
+        "selectHosts": ["hostid", "host", "name", "status"],
+        "sortfield": "name",
+        "limit": limit,
+    }
+    if hostid:
+        params["hostids"] = [hostid]
+    if query:
+        params["search"] = {"name": query, "key_": query}
+        params["searchByAny"] = True
+        params["searchWildcardsEnabled"] = False
+
+    data = await ZabbixClient().call("item.get", params)
+    return result([normalize_item(item) for item in data])
 
 
 @app.get(
@@ -111,15 +198,25 @@ async def hosts(limit: int = Query(100, ge=1, le=1000)) -> dict[str, Any]:
     operation_id="get_zabbix_item_history",
     summary="Get recent Zabbix item history",
     description=(
-        "Return recent historical values for one Zabbix item ID. Use this tool "
-        "only after an item ID and its value type are known. The history query "
-        "parameter is the Zabbix value type from 0 through 5. This operation "
-        "is read-only."
+        "Return recent values for one numeric Zabbix item ID. First use the item "
+        "search tool to obtain itemid and value_type. Supply value_type as the "
+        "history parameter. This operation is read-only."
     ),
 )
 async def history(
-    itemid: str = Query(..., min_length=1),
-    history_type: int = Query(0, alias="history", ge=0, le=5),
+    itemid: str = Query(
+        ...,
+        min_length=1,
+        pattern=r"^\d+$",
+        description="Numeric itemid returned by the item search tool",
+    ),
+    history_type: int = Query(
+        0,
+        alias="history",
+        ge=0,
+        le=5,
+        description="Zabbix value_type returned by item search",
+    ),
     limit: int = Query(100, ge=1, le=1000),
 ) -> dict[str, Any]:
     data = await ZabbixClient().call(
@@ -134,4 +231,3 @@ async def history(
         },
     )
     return result(data)
-
