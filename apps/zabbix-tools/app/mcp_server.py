@@ -16,6 +16,7 @@ mcp = FastMCP(
     "Donkey Zabbix Read Only",
     instructions=(
         "Read-only Zabbix tools. Prefer get_host_overview for general health questions. "
+        "Use get_gpu_brief for current GPU questions and get_host_24h_summary for period summaries. "
         "Never infer enabled/disabled state from raw numeric codes."
     ),
     host=MCP_HOST,
@@ -34,6 +35,10 @@ async def _get(path: str, params: dict[str, Any] | None = None) -> dict[str, Any
     return data
 
 
+async def _read(action: str, **params: Any) -> dict[str, Any]:
+    return await _get("/read", {"action": action, **params})
+
+
 @mcp.tool()
 async def list_hosts(limit: int = 100) -> dict[str, Any]:
     """List Zabbix hosts with normalized enabled and monitored fields."""
@@ -41,9 +46,25 @@ async def list_hosts(limit: int = 100) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def search_hosts(query: str, limit: int = 20) -> dict[str, Any]:
+    """Find a Zabbix host by technical name or visible name."""
+    return await _read("host_search", query=query, limit=max(1, min(limit, 100)))
+
+
+@mcp.tool()
 async def get_host_overview(host: str) -> dict[str, Any]:
-    """Get a compact general health overview by host name or numeric host ID."""
+    """Get a compact current health overview by host name or numeric host ID."""
     return await _get("/overview", {"host": host})
+
+
+@mcp.tool()
+async def get_host_24h_summary(host: str, hours: int = 24) -> dict[str, Any]:
+    """Summarize CPU, memory, disk, network and recent problems for a host."""
+    return await _read(
+        "host_24h_summary",
+        query=host,
+        hours=max(1, min(hours, 168)),
+    )
 
 
 @mcp.tool()
@@ -94,6 +115,75 @@ async def get_item_history(
             "history": max(0, min(history_type, 5)),
             "limit": max(1, min(limit, 200)),
         },
+    )
+
+
+@mcp.tool()
+async def get_gpu_brief(hosts: str) -> dict[str, Any]:
+    """Get concise current GPU utilization and temperature for comma-separated hosts."""
+    return await _read("gpu_brief", query=hosts)
+
+
+@mcp.tool()
+async def get_gpu_summary(host: str, hours: int = 24) -> dict[str, Any]:
+    """Get detailed current and historical GPU statistics for one host."""
+    return await _read(
+        "gpu_summary",
+        query=host,
+        hours=max(1, min(hours, 168)),
+    )
+
+
+@mcp.tool()
+async def get_traffic_summary(host: str, item_key: str = "") -> dict[str, Any]:
+    """Get the parsed FortiGate traffic summary JSON for a host."""
+    return await _read(
+        "traffic_summary",
+        query=host,
+        item_key=item_key,
+    )
+
+
+@mcp.tool()
+async def get_host_triggers(hostid: str, limit: int = 100) -> dict[str, Any]:
+    """Get problem triggers for a numeric Zabbix host ID."""
+    if not hostid.isdigit():
+        raise ValueError("hostid must be numeric")
+    return await _read(
+        "triggers",
+        hostid=hostid,
+        limit=max(1, min(limit, 500)),
+    )
+
+
+@mcp.tool()
+async def get_item_trends(
+    itemid: str,
+    time_from: int = 0,
+    time_till: int = 0,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Get aggregated Zabbix trends for a numeric item ID."""
+    if not itemid.isdigit():
+        raise ValueError("itemid must be numeric")
+    params: dict[str, Any] = {
+        "itemid": itemid,
+        "limit": max(1, min(limit, 1000)),
+    }
+    if time_from > 0:
+        params["time_from"] = time_from
+    if time_till > 0:
+        params["time_till"] = time_till
+    return await _read("trends", **params)
+
+
+@mcp.tool()
+async def read_zabbix_documentation(path: str, max_chars: int = 12000) -> dict[str, Any]:
+    """Read an allowlisted page from the official Zabbix 8.0 documentation."""
+    return await _read(
+        "documentation",
+        query=path,
+        limit=max(5, min(max_chars // 200, 250)),
     )
 
 
