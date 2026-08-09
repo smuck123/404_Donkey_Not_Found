@@ -22,6 +22,7 @@ from app.host_analysis import (
     gpu_summary,
     host_period_summary,
     host_search,
+    internet_traffic_summary,
     router as host_analysis_router,
     traffic_summary,
 )
@@ -421,7 +422,7 @@ async def fortigate_api_brief(
     summary="Stable read-only gateway for Zabbix data and documentation",
 )
 async def read_zabbix(
-    action: str = Query(..., pattern=r"^(capabilities|hosts|problems|items|history|host_summary|host_search|host_24h_summary|gpu_brief|gpu_summary|traffic_summary|fortigate_api_brief|triggers|trends|documentation)$"),
+    action: str = Query(..., pattern=r"^(capabilities|hosts|problems|items|history|host_summary|host_search|host_24h_summary|gpu_brief|gpu_summary|traffic_summary|internet_traffic_summary|fortigate_api_brief|triggers|trends|documentation)$"),
     query: str = "",
     hostid: str = "",
     itemid: str = "",
@@ -444,6 +445,7 @@ async def read_zabbix(
                 "gpu_brief": "Concise current GPU utilization and temperature for comma-separated host names in query.",
                 "gpu_summary": "Detailed GPU values and period statistics; use query for host name or ID.",
                 "traffic_summary": "Parse a JSON traffic item; use query for host name or ID and optional item_key.",
+                "internet_traffic_summary": "Summarize inbound and outbound Internet traffic from FortiGate SOC items stored in Zabbix.",
                 "fortigate_api_brief": "Validated FortiGate API health, inventory and performance values collected through Zabbix.",
                 "problems": "List current and recent problems.",
                 "items": "Find items by query and optional hostid.",
@@ -467,6 +469,8 @@ async def read_zabbix(
         return await gpu_summary(host=query or hostid, hours=hours)
     if action == "traffic_summary":
         return await traffic_summary(host=query or hostid, item_key=item_key)
+    if action == "internet_traffic_summary":
+        return await internet_traffic_summary(host=query or "fw1.kivela.work")
     if action == "fortigate_api_brief":
         return await fortigate_api_brief(host=query or "fw1.kivela.work")
     if action == "hosts":
