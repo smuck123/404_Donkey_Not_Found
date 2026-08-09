@@ -12,7 +12,7 @@ TIMEOUT = httpx.Timeout(15.0, connect=3.0)
 MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
 MCP_PORT = int(os.getenv("MCP_PORT", "8001"))
 DEFAULT_FIREWALL_ZABBIX_HOST = (
-    os.getenv("FORTIGATE_ZABBIX_HOST", "").strip() or "himabot"
+    os.getenv("FORTIGATE_ZABBIX_HOST", "").strip() or "fw1.kivela.work"
 )
 DEFAULT_TRAFFIC_ITEM_KEY = (
     os.getenv("ZABBIX_TRAFFIC_ITEM_KEY", "").strip() or "fortigate_summary.sh"
