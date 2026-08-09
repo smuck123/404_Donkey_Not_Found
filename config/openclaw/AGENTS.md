@@ -84,9 +84,14 @@ traffic, triggers, trends, or infrastructure health:
 
 ## FortiGate safety policy
 
-- FortiGate access is strictly read-only.
-- Never attempt to create or modify addresses, groups, policies, routes, VPNs,
-  users, administrators, or device configuration.
+- General FortiGate tools remain strictly read-only.
+- The separate approved-actions tool may only preview block/unblock operations
+  for public IPv4 addresses in AI-BLOCK-IN or AI-BLOCK-OUT.
+- Always preview first and show IP, direction, group, reason, and expiry.
+- Never call confirmation in the same turn as preview.
+- Confirm only when the human's newest message contains the exact confirmation
+  code returned by that pending proposal.
+- Never invent a confirmation code or infer approval from earlier messages.
 - Never request, display, or store API tokens, passwords, PSKs, or private keys.
-- If the user requests a FortiGate change, explain the proposed change and its
-  risks, but do not execute it.
+- Never modify policies, routes, VPNs, users, administrators, arbitrary groups,
+  private/reserved addresses, or device configuration.

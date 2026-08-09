@@ -55,6 +55,55 @@ services:
       retries: 5
       start_period: 10s
 
+
+  fortigate-actions:
+    profiles:
+      - fortigate-write
+    build:
+      context: ./apps/fortigate-actions
+    restart: unless-stopped
+    environment:
+      FORTIGATE_URL: ${FORTIGATE_URL:-}
+      FORTIGATE_WRITE_TOKEN: ${FORTIGATE_WRITE_TOKEN:-}
+      FORTIGATE_ACTION_KEY: ${FORTIGATE_ACTION_KEY:-}
+      FORTIGATE_VDOM: ${FORTIGATE_VDOM:-root}
+      FORTIGATE_VERIFY_SSL: ${FORTIGATE_VERIFY_SSL:-true}
+      FORTIGATE_PROTECTED_CIDRS: ${FORTIGATE_PROTECTED_CIDRS:-192.168.0.0/16,127.0.0.0/8,169.254.0.0/16,::1/128,fe80::/10}
+      ACTION_APPROVAL_TTL_SECONDS: ${ACTION_APPROVAL_TTL_SECONDS:-300}
+    volumes:
+      - fortigate-actions-data:/data
+    ports:
+      - "127.0.0.1:8891:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  fortigate-actions-mcp:
+    profiles:
+      - fortigate-write
+    build:
+      context: ./apps/fortigate-actions
+    restart: unless-stopped
+    environment:
+      FORTIGATE_ACTIONS_URL: http://fortigate-actions:8000
+      FORTIGATE_ACTION_KEY: ${FORTIGATE_ACTION_KEY:-}
+    depends_on:
+      fortigate-actions:
+        condition: service_healthy
+    command:
+      - python
+      - -m
+      - app.mcp_server
+    ports:
+      - "127.0.0.1:8892:8001"
+
   openclaw-gateway:
     profiles:
       - openclaw
@@ -130,3 +179,4 @@ services:
 
 volumes:
   openclaw-state:
+  fortigate-actions-data:
