@@ -147,11 +147,30 @@ async def get_gpu_summary(host: str, hours: int = 24) -> dict[str, Any]:
 async def get_internet_traffic_summary(
     host: str = "fw1.kivela.work",
 ) -> dict[str, Any]:
-    """Summarize inbound and outbound Internet traffic from FortiGate SOC data in Zabbix."""
-    return await _read(
-        "internet_traffic_summary",
-        query=host.strip() or "fw1.kivela.work",
-    )
+    """Combine Zabbix SOC traffic with current read-only FortiGate API health."""
+    selected_host = host.strip() or "fw1.kivela.work"
+    traffic = await _read("internet_traffic_summary", query=selected_host)
+    direct_api: dict[str, Any] = {}
+    direct_api_errors: dict[str, str] = {}
+    for name, path in (
+        ("health", "/fortigate/summary"),
+        ("performance", "/fortigate/performance-summary"),
+    ):
+        try:
+            direct_api[name] = await _get(path)
+        except (httpx.HTTPError, ValueError) as exc:
+            direct_api_errors[name] = str(exc)
+    return {
+        "response_style": (
+            "Answer in at most eight bullets. Start with live FortiGate health "
+            "and performance, then summarize outbound and inbound traffic. "
+            "Include top destination IP, country, service and port. Clearly "
+            "distinguish live API data from the Zabbix SOC traffic window."
+        ),
+        "direct_api": direct_api,
+        "direct_api_errors": direct_api_errors,
+        "traffic": traffic,
+    }
 
 
 @mcp.tool()
