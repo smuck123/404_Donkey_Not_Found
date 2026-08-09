@@ -382,8 +382,14 @@ async def gpu_brief(
                 utilization = gpu_value(items, "gpu utilization")
             if temperature is None:
                 temperature = gpu_value(items, "gpu temperature")
+            if utilization is not None and not utilization.get("units"):
+                utilization["units"] = "%"
+            if temperature is not None and not temperature.get("units"):
+                temperature["units"] = "°C"
             available = any(
-                metric is not None and metric.get("value") is not None
+                metric is not None
+                and metric.get("value") is not None
+                and metric.get("fresh") is True
                 for metric in (utilization, temperature)
             )
             results.append({
