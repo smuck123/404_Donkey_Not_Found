@@ -394,8 +394,7 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $.device.build
-              error_handler: CUSTOM_VALUE
-              error_handler_params: '0'
+              error_handler: DISCARD_VALUE
           master_item:
             key: fortigate.api.raw
           tags:
@@ -410,8 +409,7 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $.interfaces.total
-              error_handler: CUSTOM_VALUE
-              error_handler_params: '0'
+              error_handler: DISCARD_VALUE
           master_item:
             key: fortigate.api.raw
           tags:
@@ -426,8 +424,7 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $.interfaces.up
-              error_handler: CUSTOM_VALUE
-              error_handler_params: '0'
+              error_handler: DISCARD_VALUE
           master_item:
             key: fortigate.api.raw
           tags:
@@ -442,8 +439,7 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $.interfaces.down
-              error_handler: CUSTOM_VALUE
-              error_handler_params: '0'
+              error_handler: DISCARD_VALUE
           master_item:
             key: fortigate.api.raw
           tags:
@@ -472,8 +468,7 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $.policies.total
-              error_handler: CUSTOM_VALUE
-              error_handler_params: '0'
+              error_handler: DISCARD_VALUE
           master_item:
             key: fortigate.api.raw
           tags:
@@ -488,8 +483,7 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $.policies.enabled
-              error_handler: CUSTOM_VALUE
-              error_handler_params: '0'
+              error_handler: DISCARD_VALUE
           master_item:
             key: fortigate.api.raw
           tags:
@@ -504,8 +498,7 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $.policies.disabled
-              error_handler: CUSTOM_VALUE
-              error_handler_params: '0'
+              error_handler: DISCARD_VALUE
           master_item:
             key: fortigate.api.raw
           tags:
@@ -520,8 +513,7 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $.routes.static_total
-              error_handler: CUSTOM_VALUE
-              error_handler_params: '0'
+              error_handler: DISCARD_VALUE
           master_item:
             key: fortigate.api.raw
           tags:
@@ -536,8 +528,7 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $.vpn.phase1_total
-              error_handler: CUSTOM_VALUE
-              error_handler_params: '0'
+              error_handler: DISCARD_VALUE
           master_item:
             key: fortigate.api.raw
           tags:
@@ -552,8 +543,7 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $.vpn.phase2_total
-              error_handler: CUSTOM_VALUE
-              error_handler_params: '0'
+              error_handler: DISCARD_VALUE
           master_item:
             key: fortigate.api.raw
           tags:
@@ -568,8 +558,7 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $.vpn.configuration_mismatch
-              error_handler: CUSTOM_VALUE
-              error_handler_params: '0'
+              error_handler: DISCARD_VALUE
           master_item:
             key: fortigate.api.raw
           tags:
@@ -589,8 +578,7 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $.performance.session.current
-              error_handler: CUSTOM_VALUE
-              error_handler_params: '0'
+              error_handler: DISCARD_VALUE
           master_item:
             key: fortigate.api.raw
           tags:
@@ -606,8 +594,7 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $.performance.setuprate.current
-              error_handler: CUSTOM_VALUE
-              error_handler_params: '0'
+              error_handler: DISCARD_VALUE
           master_item:
             key: fortigate.api.raw
           tags:
@@ -623,8 +610,7 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $.performance.cpu.current
-              error_handler: CUSTOM_VALUE
-              error_handler_params: '0'
+              error_handler: DISCARD_VALUE
           master_item:
             key: fortigate.api.raw
           tags:
@@ -645,8 +631,7 @@ zabbix_export:
             - type: JSONPATH
               parameters:
                 - $.performance.mem.current
-              error_handler: CUSTOM_VALUE
-              error_handler_params: '0'
+              error_handler: DISCARD_VALUE
           master_item:
             key: fortigate.api.raw
           tags:
