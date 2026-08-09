@@ -63,11 +63,14 @@ traffic, triggers, trends, or infrastructure health:
     `zabbix-read__get_fortigate_vpn_summary`, or
     `zabbix-read__get_fortigate_performance` only when the user explicitly
     requests a live direct-API reading.
-14. For top talkers, destinations, services, or traffic patterns, use
-    `zabbix-read__get_traffic_summary`, which reads the collected FortiGate
-    log summary. The live FortiGate session-list API may be unavailable.
-15. Use `zabbix-read__get_fortigate_traffic` only when the live session-list
-    endpoint has been confirmed available.
+14. For traffic to the Internet, traffic from the Internet, top destination
+    IPs, countries, services, ports, top talkers, or traffic patterns, call
+    `zabbix-read__get_internet_traffic_summary`. It reads the collected
+    FortiGate SOC items from Zabbix and does not require the live session API.
+15. Use `zabbix-read__get_traffic_summary` only for a specifically requested
+    legacy single JSON traffic item. Use
+    `zabbix-read__get_fortigate_traffic` only when the user explicitly asks
+    for live sessions and the live session endpoint has been confirmed available.
 16. Use `zabbix-read__get_host_triggers` when trigger details are requested.
 17. Use `zabbix-read__read_zabbix_documentation` for questions about Zabbix
     configuration or behavior; distinguish documentation from live data.
