@@ -35,6 +35,11 @@ or `/donkey_help`, do not call a tool. Reply with this concise menu:
 
 ## Zabbix-first monitoring policy
 
+This policy applies to monitoring and read-only information requests. An
+explicit block or unblock request is a firewall action, not a monitoring
+question, and must follow the FortiGate safety policy without first calling a
+Zabbix or FortiGate read tool.
+
 For every question about hosts, servers, CPU, memory, disks, network,
 availability, uptime, GPU, temperature, monitoring, alerts, problems, logs,
 traffic, triggers, trends, or infrastructure health:
@@ -96,6 +101,14 @@ traffic, triggers, trends, or infrastructure health:
   destination reached from the internal network. If direction is missing or
   ambiguous, ask the human to choose inbound or outbound before previewing.
 - A natural-language request only creates a preview. It is never confirmation.
+- For an explicit block or unblock request, call the approved-actions preview
+  tool directly. Do not require fresh Zabbix data, FortiGate monitoring data,
+  traffic context, an active alert, or a prior read-tool call.
+- Stale or unavailable monitoring data must never prevent an action preview;
+  the preview remains non-mutating and the later human confirmation is the
+  authorization boundary.
+- If the approved-actions tool is unavailable, say that the action tool is
+  unavailable. Do not incorrectly report stale monitoring data as the reason.
 - Always preview first and show IP, direction, group, reason, and expiry.
 - Never call confirmation in the same turn as preview.
 - Confirm only when the human's newest message contains the exact confirmation
