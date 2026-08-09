@@ -67,6 +67,9 @@ traffic, triggers, trends, or infrastructure health:
     IPs, countries, services, ports, top talkers, or traffic patterns, call
     `zabbix-read__get_internet_traffic_summary`. It reads the collected
     FortiGate SOC items from Zabbix and does not require the live session API.
+    For these traffic questions, do not call
+    `zabbix-read__get_fortigate_zabbix_brief` and do not report direct API
+    collection health unless the user explicitly asks about API health.
 15. Use `zabbix-read__get_traffic_summary` only for a specifically requested
     legacy single JSON traffic item. Use
     `zabbix-read__get_fortigate_traffic` only when the user explicitly asks
