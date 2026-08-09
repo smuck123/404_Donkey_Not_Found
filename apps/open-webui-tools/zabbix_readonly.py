@@ -2,11 +2,10 @@
 title: Zabbix Read Only
 author: 404 Donkey Not Found
 description: Read-only access to Zabbix hosts, problems, item discovery, and history.
-version: 0.2.0
+version: 0.2.1
 """
 
 import json
-from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -17,7 +16,7 @@ class Tools:
         self.base_url = "http://127.0.0.1:8889"
         self.timeout = 20
 
-    def _get(self, path: str, parameters: Optional[dict] = None) -> dict:
+    def _get(self, path: str, parameters: dict = None) -> dict:
         query = urlencode(
             {
                 key: value
@@ -82,8 +81,8 @@ class Tools:
 
     def get_zabbix_items(
         self,
-        query: Optional[str] = None,
-        hostid: Optional[str] = None,
+        query: str,
+        hostid: str = "",
         limit: int = 100,
     ) -> dict:
         """
