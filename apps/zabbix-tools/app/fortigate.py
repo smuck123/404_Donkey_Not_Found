@@ -16,6 +16,7 @@ ALLOWED_PATHS = {
     "routes": "/api/v2/cmdb/router/static",
     "vpn_phase1": "/api/v2/cmdb/vpn.ipsec/phase1-interface",
     "vpn_phase2": "/api/v2/cmdb/vpn.ipsec/phase2-interface",
+    "resources": "/api/v2/monitor/system/resource/usage",
 }
 
 
@@ -230,6 +231,83 @@ async def fortigate_summary() -> dict[str, Any]:
             "phase2_entries": len(phase2),
             "configuration_count_mismatch": len(phase1) != len(phase2),
         },
+        "partial": bool(errors),
+        "errors": errors,
+    }
+
+
+async def _resource_stat(resource: str, interval: str = "1-min") -> dict[str, Any]:
+    payload = await _request(
+        ALLOWED_PATHS["resources"],
+        {"resource": resource, "interval": interval},
+    )
+    results = payload.get("results", {}) if isinstance(payload, dict) else {}
+    rows = results.get(resource, []) if isinstance(results, dict) else []
+    row = rows[0] if isinstance(rows, list) and rows and isinstance(rows[0], dict) else {}
+
+    historical = row.get("historical", {})
+    interval_data = (
+        historical.get(interval, {})
+        if isinstance(historical, dict)
+        else {}
+    )
+    samples = interval_data.get("values", []) if isinstance(interval_data, dict) else []
+    values = []
+    newest_timestamp_ms = None
+    for sample in samples:
+        if not isinstance(sample, list) or len(sample) < 2:
+            continue
+        try:
+            value = float(sample[1])
+        except (TypeError, ValueError):
+            continue
+        values.append(value)
+        if newest_timestamp_ms is None:
+            try:
+                newest_timestamp_ms = int(sample[0])
+            except (TypeError, ValueError):
+                pass
+
+    current = row.get("current")
+    return {
+        "current": current,
+        "samples": len(values),
+        "minimum": min(values) if values else current,
+        "average": round(sum(values) / len(values), 2) if values else current,
+        "maximum": max(values) if values else current,
+        "newest_timestamp_ms": newest_timestamp_ms,
+    }
+
+
+@router.get(
+    "/performance-summary",
+    summary="Summarize current FortiGate resources and short history",
+)
+async def fortigate_performance_summary() -> dict[str, Any]:
+    resource_names = ("session", "setuprate", "cpu", "mem")
+    values = await asyncio.gather(
+        *[_resource_stat(resource) for resource in resource_names],
+        return_exceptions=True,
+    )
+
+    data: dict[str, Any] = {}
+    errors: dict[str, str] = {}
+    for resource, value in zip(resource_names, values):
+        if isinstance(value, Exception):
+            errors[resource] = str(value)
+        else:
+            data[resource] = value
+
+    return {
+        "read_only": True,
+        "interval": "1-min",
+        "units": {
+            "session": "sessions",
+            "setuprate": "sessions/second",
+            "cpu": "percent",
+            "mem": "percent",
+        },
+        "resources": data,
         "partial": bool(errors),
         "errors": errors,
     }
