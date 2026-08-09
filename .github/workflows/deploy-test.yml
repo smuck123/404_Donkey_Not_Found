@@ -1,0 +1,49 @@
+name: Deploy TEST service
+
+on:
+  push:
+    branches:
+      - test
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-donkey-test
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - ai-server
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Copy application to test directory
+        run: |
+          mkdir -p /opt/ai-stack/test
+          rsync -a --delete \
+            --exclude '.git/' \
+            --exclude '.env' \
+            --exclude 'secrets/' \
+            ./ /opt/ai-stack/test/
+
+      - name: Build and start test service
+        working-directory: /opt/ai-stack/test
+        run: docker compose -p donkey-test -f compose.test.yml up -d --build
+
+      - name: Health check
+        run: |
+          for attempt in $(seq 1 20); do
+            if curl -fsS http://127.0.0.1:8889/health; then
+              exit 0
+            fi
+            sleep 3
+          done
+          docker compose -p donkey-test -f /opt/ai-stack/test/compose.test.yml ps
+          docker compose -p donkey-test -f /opt/ai-stack/test/compose.test.yml logs --no-color --tail=100
+          exit 1
+
