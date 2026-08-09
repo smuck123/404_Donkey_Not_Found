@@ -324,3 +324,92 @@ async def traffic_summary(
         "item": item_info,
         "data": payload,
     }
+
+
+def split_host_names(value: str) -> list[str]:
+    normalized = value.replace(" and ", ",").replace(";", ",")
+    return [part.strip() for part in normalized.split(",") if part.strip()][:5]
+
+
+def gpu_value(items: list[dict[str, Any]], key_fragment: str) -> dict[str, Any] | None:
+    fragment = key_fragment.lower()
+    matches = [
+        item
+        for item in items
+        if fragment in str(item.get("key_", "")).lower()
+        or fragment in str(item.get("name", "")).lower()
+    ]
+    if not matches:
+        return None
+    matches.sort(key=lambda item: int(str(item.get("lastclock", "0"))) if str(item.get("lastclock", "0")).isdigit() else 0, reverse=True)
+    item = matches[0]
+    raw_clock = str(item.get("lastclock", ""))
+    age = max(0, int(time.time()) - int(raw_clock)) if raw_clock.isdigit() and int(raw_clock) > 0 else None
+    value = item.get("lastvalue")
+    return {
+        "value": value if value not in ("", None) else None,
+        "units": item.get("units", ""),
+        "lastclock": int(raw_clock) if raw_clock.isdigit() else None,
+        "age_seconds": age,
+        "fresh": age is not None and age <= 300,
+    }
+
+
+@router.get("/gpu-brief", operation_id="get_zabbix_gpu_brief")
+async def gpu_brief(
+    hosts: str = Query(..., min_length=1, max_length=500),
+) -> dict[str, Any]:
+    """Return only current GPU utilization and temperature for up to five hosts."""
+    requested = split_host_names(hosts)
+    results = []
+    for requested_host in requested:
+        try:
+            resolved = await resolve_host(requested_host)
+            data = await ZabbixClient().call(
+                "item.get",
+                {
+                    "hostids": [str(resolved["hostid"])],
+                    "output": ["itemid", "name", "key_", "lastvalue", "lastclock", "units", "status", "state"],
+                    "search": {"key_": "gpu.", "name": "GPU"},
+                    "searchByAny": True,
+                    "limit": 500,
+                },
+            )
+            items = data if isinstance(data, list) else []
+            utilization = gpu_value(items, "gpu.utilization")
+            temperature = gpu_value(items, "gpu.temperature")
+            if utilization is None:
+                utilization = gpu_value(items, "gpu utilization")
+            if temperature is None:
+                temperature = gpu_value(items, "gpu temperature")
+            available = any(
+                metric is not None and metric.get("value") is not None
+                for metric in (utilization, temperature)
+            )
+            results.append({
+                "requested_host": requested_host,
+                "hostid": resolved.get("hostid"),
+                "host": resolved.get("name") or resolved.get("host"),
+                "data_available": available,
+                "utilization": utilization,
+                "temperature": temperature,
+                "answer_hint": (
+                    "Report utilization and temperature in one short bullet."
+                    if available
+                    else "Say exactly: No current GPU data available."
+                ),
+            })
+        except HTTPException:
+            results.append({
+                "requested_host": requested_host,
+                "host": None,
+                "data_available": False,
+                "utilization": None,
+                "temperature": None,
+                "answer_hint": "Say exactly: Host not found.",
+            })
+    return {
+        "response_style": "One bullet per requested host. Maximum 60 words. Do not add recommendations.",
+        "count": len(results),
+        "data": results,
+    }
