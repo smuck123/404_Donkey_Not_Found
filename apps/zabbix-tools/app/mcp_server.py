@@ -7,12 +7,19 @@ from mcp.server.fastmcp import FastMCP
 
 BASE_URL = os.getenv("ZABBIX_TOOLS_URL", "http://127.0.0.1:8889").rstrip("/")
 TIMEOUT = httpx.Timeout(15.0, connect=3.0)
+MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
+MCP_PORT = int(os.getenv("MCP_PORT", "8001"))
+
+# FastMCP 1.x configures its bind address when the server is created.
+# FastMCP.run() only selects the transport and does not accept host/port.
 mcp = FastMCP(
     "Donkey Zabbix Read Only",
     instructions=(
         "Read-only Zabbix tools. Prefer get_host_overview for general health questions. "
         "Never infer enabled/disabled state from raw numeric codes."
     ),
+    host=MCP_HOST,
+    port=MCP_PORT,
     json_response=True,
 )
 
@@ -91,4 +98,4 @@ async def get_item_history(
 
 
 if __name__ == "__main__":
-    mcp.run(transport="streamable-http", host="0.0.0.0", port=8001)
+    mcp.run(transport="streamable-http")
