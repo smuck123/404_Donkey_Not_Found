@@ -85,8 +85,11 @@ def selected_files(groups: list[str]) -> list[Path]:
 
 def read_increment(path: Path, previous: dict, max_lines: int) -> tuple[list[str], dict, int]:
     stat = path.stat()
+    previous_inode = previous.get("inode")
     offset = int(previous.get("offset", stat.st_size))
-    if previous.get("inode") != stat.st_ino or offset > stat.st_size:
+    # A new installation establishes a baseline at EOF. Only a known file that
+    # rotated or shrank should be read from the beginning.
+    if previous_inode is not None and (previous_inode != stat.st_ino or offset > stat.st_size):
         offset = 0
     with path.open("r", encoding="utf-8", errors="replace") as handle:
         handle.seek(offset)
@@ -134,7 +137,7 @@ def ollama_summary(payload: dict, url: str, model: str, timeout: float, retries:
         "stream": False,
         "think": False,
         "messages": [
-            {"role": "system", "content": "You are a Linux operations analyst. Answer in at most two plain-text sentences. State the main operational issue and whether a security breach is suspected. Use only supplied facts. Do not use Markdown."},
+            {"role": "system", "content": "You are a Linux operations analyst. Answer in at most two plain-text sentences. State the main operational issue and whether a security breach is suspected. Use only supplied facts. Do not use Markdown. dropped_lines only indicates an input safety cap and is not itself an incident or severity signal."},
             {"role": "user", "content": json.dumps(payload, separators=(",", ":"))},
         ],
     }
