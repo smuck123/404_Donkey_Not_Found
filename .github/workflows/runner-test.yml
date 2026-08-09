@@ -1,0 +1,48 @@
+name: Test AI Server Runner
+
+on:
+  workflow_dispatch:
+
+jobs:
+  server-test:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - ai-server
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Server information
+        run: |
+          echo "=== HOST ==="
+          hostname
+          echo "=== USER ==="
+          whoami
+          echo "=== LOCATION ==="
+          pwd
+
+      - name: Check Docker
+        run: |
+          docker --version
+          docker compose version
+          docker ps
+
+      - name: Check GPU
+        run: |
+          nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
+
+      - name: Check Ollama
+        run: |
+          curl -fsS http://127.0.0.1:11434/api/tags
+
+      - name: Check Zabbix
+        run: |
+          systemctl is-active zabbix-agent2
+
+      - name: Check deployment directories
+        run: |
+          ls -ld /opt/ai-stack/test
+          ls -ld /opt/ai-stack/prod
