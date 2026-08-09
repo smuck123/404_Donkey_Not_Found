@@ -1,4 +1,3 @@
-import hashlib
 import hmac
 import ipaddress
 import json
@@ -77,8 +76,8 @@ def normalize_ip(raw: str) -> str:
 
 
 def object_name(ip: str, direction: str) -> str:
-    digest = hashlib.sha256(ip.encode()).hexdigest()[:12].upper()
-    return f"AI_{'IN' if direction == 'inbound' else 'OUT'}_{digest}"
+    readable_ip = ip.replace(".", "_")
+    return f"AI_BLOCK_{'IN' if direction == 'inbound' else 'OUT'}_{readable_ip}"
 
 
 @contextmanager
