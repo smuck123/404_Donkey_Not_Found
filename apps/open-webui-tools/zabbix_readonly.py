@@ -2,7 +2,7 @@
 title: Zabbix Read Only Stable
 author: 404 Donkey Not Found
 description: Stable read-only gateway for Zabbix monitoring data and official documentation.
-version: 1.0.1
+version: 1.1.0
 """
 
 import json
@@ -21,12 +21,20 @@ class Tools:
         time_from: int = 0,
         time_till: int = 0,
         limit: int = 100,
+        hours: int = 24,
+        item_key: str = "",
     ) -> dict:
         """
         Read Zabbix monitoring data or official Zabbix 8.0 documentation.
 
         Allowed actions:
+        capabilities - list every current server-side read action.
         hosts - list hosts.
+        host_search - find hosts by name using query.
+        host_24h_summary - summarize CPU, memory, disk, network and recent
+        problems for the host name or ID in query.
+        gpu_summary - summarize GPU values for the host in query.
+        traffic_summary - parse a JSON traffic item for the host in query.
         problems - list current and recent problems.
         items - find items using query and optional hostid.
         history - retrieve item history using numeric itemid and history value type.
@@ -48,6 +56,8 @@ class Tools:
         :param time_from: Optional Unix start timestamp for trends; use 0 to omit.
         :param time_till: Optional Unix end timestamp for trends; use 0 to omit.
         :param limit: Maximum result count, normally 1 through 1000.
+        :param hours: Analysis period in hours, from 1 through 168.
+        :param item_key: Optional JSON traffic item key.
         """
         parameters = {
             "action": action,
@@ -56,6 +66,8 @@ class Tools:
             "itemid": itemid,
             "history": history,
             "limit": max(1, min(limit, 1000)),
+            "hours": max(1, min(hours, 168)),
+            "item_key": item_key,
         }
         if time_from > 0:
             parameters["time_from"] = time_from
