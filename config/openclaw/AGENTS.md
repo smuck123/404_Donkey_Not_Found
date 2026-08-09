@@ -61,15 +61,14 @@ traffic, triggers, trends, or infrastructure health:
     and never report metrics when `data_valid` is false.
 13. Use `zabbix-read__get_fortigate_summary`,
     `zabbix-read__get_fortigate_vpn_summary`, or
-    `zabbix-read__get_fortigate_performance` only when the user explicitly
-    requests a live direct-API reading.
+    `zabbix-read__get_fortigate_performance` whenever current read-only
+    firewall health or performance adds useful context.
 14. For traffic to the Internet, traffic from the Internet, top destination
     IPs, countries, services, ports, top talkers, or traffic patterns, call
-    `zabbix-read__get_internet_traffic_summary`. It reads the collected
-    FortiGate SOC items from Zabbix and does not require the live session API.
-    For these traffic questions, do not call
-    `zabbix-read__get_fortigate_zabbix_brief` and do not report direct API
-    collection health unless the user explicitly asks about API health.
+    `zabbix-read__get_internet_traffic_summary`. It combines current
+    read-only FortiGate API health and performance with the collected SOC
+    traffic items from Zabbix. Report both sources and distinguish the live
+    API snapshot from the Zabbix traffic-analysis window.
 15. Use `zabbix-read__get_traffic_summary` only for a specifically requested
     legacy single JSON traffic item. Use
     `zabbix-read__get_fortigate_traffic` only when the user explicitly asks
