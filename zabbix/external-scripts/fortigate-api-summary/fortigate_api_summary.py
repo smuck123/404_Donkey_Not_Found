@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Collect a compact, read-only FortiGate API snapshot for Zabbix."""
 
+from __future__ import annotations
+
 import argparse
 import json
 import os
