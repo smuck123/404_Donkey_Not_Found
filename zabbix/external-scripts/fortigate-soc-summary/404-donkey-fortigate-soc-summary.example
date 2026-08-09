@@ -1,0 +1,9 @@
+# FortiGate syslog file on the Zabbix server.
+FORTIGATE_LOG=/var/log/fw/fortigate.json
+
+# Number of recent log lines analyzed in each collection window.
+FORTIGATE_SOC_LINES=5000
+
+# Local Zabbix server and exact technical host name.
+ZABBIX_SERVER=127.0.0.1
+ZABBIX_HOST=fw1.kivela.work
