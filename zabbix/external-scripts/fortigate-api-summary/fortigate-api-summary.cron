@@ -1,0 +1,2 @@
+# Collect direct FortiGate API health every five minutes.
+*/5 * * * * root /usr/local/bin/send_fortigate_api_summary.sh >> /var/log/fortigate-api-summary.log 2>&1
