@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from typing import Any
@@ -15,6 +16,8 @@ from app.overview import router as overview_router
 from app.fortigate import (
     FortiGateAPIError,
     FortiGateConfigurationError,
+    fortigate_performance_summary,
+    fortigate_summary,
     router as fortigate_router,
 )
 from app.host_analysis import (
@@ -116,6 +119,74 @@ def normalize_item(item: dict[str, Any]) -> dict[str, Any]:
 @app.get("/health", include_in_schema=False)
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get(
+    "/openwebui/context",
+    operation_id="get_complete_infrastructure_context",
+    summary="Get a complete read-only infrastructure context for Open WebUI",
+    description=(
+        "Return a curated snapshot of Zabbix hosts and problems, live FortiGate "
+        "health and performance, and recent inbound/outbound Internet traffic. "
+        "Use this tool for broad infrastructure or firewall questions instead "
+        "of calling many individual tools. This operation is read-only."
+    ),
+)
+async def openwebui_context(
+    firewall_host: str = Query(
+        "fw1.kivela.work",
+        min_length=1,
+        max_length=255,
+        description="Zabbix host containing the FortiGate SOC items",
+    ),
+    host_limit: int = Query(200, ge=1, le=1000),
+    problem_limit: int = Query(100, ge=1, le=500),
+) -> dict[str, Any]:
+    async def capture(name: str, awaitable: Any) -> tuple[str, Any]:
+        try:
+            return name, await awaitable
+        except Exception as exc:
+            return name, {"available": False, "error": str(exc)}
+
+    collected = await asyncio.gather(
+        capture("hosts", hosts(limit=host_limit)),
+        capture("problems", problems(limit=problem_limit)),
+        capture("fortigate_health", fortigate_summary()),
+        capture("fortigate_performance", fortigate_performance_summary()),
+        capture(
+            "internet_traffic",
+            internet_traffic_summary(host=firewall_host),
+        ),
+    )
+    sections = dict(collected)
+    host_rows = sections.get("hosts", {}).get("data", [])
+    problem_rows = sections.get("problems", {}).get("data", [])
+    enabled = [row for row in host_rows if row.get("enabled") is True]
+    disabled = [row for row in host_rows if row.get("enabled") is False]
+
+    return {
+        "response_style": (
+            "Answer the user's exact question first. Default to at most eight "
+            "bullets. Distinguish live FortiGate API values from the Zabbix SOC "
+            "traffic window. Mention stale or unavailable sections. Do not list "
+            "normal low-value details unless requested."
+        ),
+        "generated_at": int(time.time()),
+        "read_only": True,
+        "estate": {
+            "hosts_total": len(host_rows),
+            "hosts_enabled": len(enabled),
+            "hosts_disabled": len(disabled),
+            "active_or_recent_problems": len(problem_rows),
+            "hosts": host_rows,
+            "problems": problem_rows,
+        },
+        "fortigate": {
+            "health": sections.get("fortigate_health"),
+            "performance": sections.get("fortigate_performance"),
+            "internet_traffic": sections.get("internet_traffic"),
+        },
+    }
 
 
 @app.get(
