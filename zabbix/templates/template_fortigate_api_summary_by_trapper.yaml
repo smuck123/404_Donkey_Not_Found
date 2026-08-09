@@ -37,12 +37,6 @@ zabbix_export:
               value: raw
             - tag: source
               value: fortigate-api
-          triggers:
-            - uuid: a17c904b236a4c349a9a8214a0f74101
-              expression: 'nodata(/Template FortiGate API Summary by Trapper/fortigate.api.raw,15m)=1'
-              name: 'FortiGate API summary has no data for 15 minutes'
-              priority: WARNING
-              description: 'The Zabbix-server collector has not delivered a summary recently.'
         - uuid: a17c904b236a4c349a9a8214a0f74003
           name: 'FortiGate API: Collection status'
           type: DEPENDENT
@@ -60,6 +54,11 @@ zabbix_export:
             - tag: component
               value: collector
           triggers:
+            - uuid: a17c904b236a4c349a9a8214a0f74101
+              expression: 'nodata(/Template FortiGate API Summary by Trapper/fortigate.api.collection_status,15m)=1'
+              name: 'FortiGate API summary has no data for 15 minutes'
+              priority: WARNING
+              description: 'The Zabbix-server collector has not delivered a summary recently.'
             - uuid: a17c904b236a4c349a9a8214a0f74102
               expression: 'last(/Template FortiGate API Summary by Trapper/fortigate.api.collection_status)<>"ok"'
               name: 'FortiGate API summary collection is not healthy'
