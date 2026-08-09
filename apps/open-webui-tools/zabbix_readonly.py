@@ -2,7 +2,7 @@
 title: Zabbix Read Only Stable
 author: 404 Donkey Not Found
 description: Stable read-only gateway for Zabbix monitoring data and official documentation.
-version: 1.0.0
+version: 1.0.1
 """
 
 import json
@@ -71,6 +71,57 @@ class Tools:
             return {
                 "error": {
                     "code": "zabbix_read_error",
+                    "message": str(error),
+                }
+            }
+
+    def draft_zabbix_configuration(
+        self,
+        kind: str,
+        specification_json: str,
+    ) -> dict:
+        """
+        Generate a reviewable Zabbix 8.0 JSON import draft without modifying
+        Zabbix. Supported kinds are template and dashboard. The result must be
+        reviewed and imported manually by an administrator.
+
+        :param kind: Draft kind: template or dashboard.
+        :param specification_json: JSON object matching the requested draft.
+        """
+        if kind not in {"template", "dashboard"}:
+            return {
+                "error": {
+                    "code": "invalid_draft_kind",
+                    "message": "kind must be template or dashboard",
+                }
+            }
+        try:
+            specification = json.loads(specification_json)
+        except ValueError as error:
+            return {
+                "error": {
+                    "code": "invalid_json",
+                    "message": str(error),
+                }
+            }
+
+        body = json.dumps(specification).encode("utf-8")
+        request = Request(
+            f"http://127.0.0.1:8889/drafts/{kind}",
+            data=body,
+            method="POST",
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urlopen(request, timeout=30) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except Exception as error:
+            return {
+                "error": {
+                    "code": "zabbix_draft_error",
                     "message": str(error),
                 }
             }
