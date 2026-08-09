@@ -34,6 +34,16 @@ FG_VDOM = os.getenv("FORTIGATE_VDOM", "root")
 VERIFY_SSL = os.getenv("FORTIGATE_VERIFY_SSL", "true").lower() in {"1", "true", "yes"}
 ACTION_KEY = os.getenv("FORTIGATE_ACTION_KEY", "")
 GROUPS = {"inbound": "AI-BLOCK-IN", "outbound": "AI-BLOCK-OUT"}
+USER_GROUPS = {
+    "block": "AI-BLOCK-USERS",
+    "unblock": "AI-BLOCK-USERS",
+    "slow": "AI-SLOW-USERS",
+    "restore": "AI-SLOW-USERS",
+}
+USER_OBJECTS = {
+    "Big": ["Big", "BIG-Kone", "iPhone BIG", "192.168.0.107"],
+    "Bee": ["Bee Puhelin"],
+}
 PROTECTED = [
     ipaddress.ip_network(value.strip(), strict=False)
     for value in os.getenv(
@@ -56,6 +66,13 @@ class ConfirmRequest(BaseModel):
     proposal_id: str = Field(pattern=r"^[a-f0-9]{24}$")
     confirmation_code: str = Field(pattern=r"^[A-Z0-9]{8}$")
     approved_by: str = Field(min_length=1, max_length=100)
+
+
+class UserPreviewRequest(BaseModel):
+    action: Literal["block", "unblock", "slow", "restore"]
+    subject: Literal["Big", "Bee"]
+    reason: str = Field(min_length=3, max_length=500)
+    requested_by: str = Field(min_length=1, max_length=100)
 
 
 def require_action_key(x_action_key: str = Header(default="")) -> None:
@@ -91,6 +108,13 @@ def database():
         direction TEXT NOT NULL, reason TEXT NOT NULL, requested_by TEXT NOT NULL,
         created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, status TEXT NOT NULL,
         approved_by TEXT, completed_at INTEGER, result TEXT)"""
+    )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS user_proposals (
+        id TEXT PRIMARY KEY, code TEXT NOT NULL, action TEXT NOT NULL, subject TEXT NOT NULL,
+        reason TEXT NOT NULL, requested_by TEXT NOT NULL, created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL, status TEXT NOT NULL, approved_by TEXT,
+        completed_at INTEGER, result TEXT)"""
     )
     try:
         yield connection
@@ -140,6 +164,45 @@ async def group_members(group: str) -> list[dict[str, str]]:
         results = results[0] if results else {}
     members = results.get("member", []) if isinstance(results, dict) else []
     return [{"name": str(row["name"])} for row in members if isinstance(row, dict) and row.get("name")]
+
+
+async def apply_user_action(action: str, subject: str) -> dict:
+    group = USER_GROUPS[action]
+    objects = USER_OBJECTS[subject]
+    members = await group_members(group)
+    names = {row["name"] for row in members}
+    add_members = action in {"block", "slow"}
+
+    if add_members:
+        for object_name_value in objects:
+            await fg_request(
+                "GET",
+                f"/api/v2/cmdb/firewall/address/{quote(object_name_value, safe='')}",
+            )
+        updated = members + [
+            {"name": object_name_value}
+            for object_name_value in objects
+            if object_name_value not in names
+        ]
+        changed = len(updated) != len(members)
+    else:
+        updated = [row for row in members if row["name"] not in objects]
+        changed = len(updated) != len(members)
+
+    if changed:
+        await fg_request(
+            "PUT",
+            f"/api/v2/cmdb/firewall/addrgrp/{quote(group, safe='')}",
+            {"member": updated},
+        )
+
+    return {
+        "changed": changed,
+        "subject": subject,
+        "objects": objects,
+        "group": group,
+        "action": action,
+    }
 
 
 async def apply_action(action: str, ip: str, direction: str, reason: str) -> dict:
@@ -230,6 +293,142 @@ async def confirm(request: ConfirmRequest) -> dict:
         connection.execute("UPDATE proposals SET status='completed', completed_at=?, result=? WHERE id=?", (now, json.dumps(result), request.proposal_id))
     audit({"event": "action_completed", "proposal_id": request.proposal_id, "approved_by": request.approved_by, **result})
     return {"status": "completed", **result}
+
+
+@app.post(
+    "/user-actions/preview",
+    operation_id="propose_fortigate_user_action",
+    dependencies=[Depends(require_action_key)],
+)
+async def preview_user_action(request: UserPreviewRequest) -> dict:
+    settings_ready()
+    now = int(time.time())
+    proposal_id = secrets.token_hex(12)
+    code = secrets.token_hex(4).upper()
+    group = USER_GROUPS[request.action]
+    objects = USER_OBJECTS[request.subject]
+    with database() as connection:
+        connection.execute(
+            "INSERT INTO user_proposals VALUES (?,?,?,?,?,?,?,?,?,'pending',NULL,NULL,NULL)",
+            (
+                proposal_id,
+                code,
+                request.action,
+                request.subject,
+                request.reason,
+                request.requested_by,
+                now,
+                now + TTL,
+            ),
+        )
+    audit(
+        {
+            "event": "user_proposal_created",
+            "proposal_id": proposal_id,
+            "action": request.action,
+            "subject": request.subject,
+            "requested_by": request.requested_by,
+        }
+    )
+    return {
+        "requires_human_confirmation": True,
+        "proposal_id": proposal_id,
+        "confirmation_code": code,
+        "expires_at": now + TTL,
+        "preview": {
+            "action": request.action,
+            "subject": request.subject,
+            "objects": objects,
+            "group": group,
+            "reason": request.reason,
+        },
+        "instruction": (
+            f"Ask the human to reply exactly: CONFIRM {code}. "
+            "Do not call confirmation in the same turn."
+        ),
+    }
+
+
+@app.post(
+    "/user-actions/confirm",
+    operation_id="confirm_fortigate_user_action",
+    dependencies=[Depends(require_action_key)],
+)
+async def confirm_user_action(request: ConfirmRequest) -> dict:
+    settings_ready()
+    now = int(time.time())
+    with database() as connection:
+        row = connection.execute(
+            "SELECT * FROM user_proposals WHERE id=?", (request.proposal_id,)
+        ).fetchone()
+        if not row or row["status"] != "pending":
+            raise HTTPException(
+                status_code=409, detail="Proposal is missing or no longer pending"
+            )
+        if row["expires_at"] < now:
+            connection.execute(
+                "UPDATE user_proposals SET status='expired' WHERE id=?",
+                (request.proposal_id,),
+            )
+            raise HTTPException(status_code=409, detail="Proposal has expired")
+        if not hmac.compare_digest(
+            row["code"], request.confirmation_code.upper()
+        ):
+            raise HTTPException(
+                status_code=403, detail="Confirmation code is incorrect"
+            )
+        connection.execute(
+            "UPDATE user_proposals SET status='executing', approved_by=? WHERE id=?",
+            (request.approved_by, request.proposal_id),
+        )
+    try:
+        result = await apply_user_action(
+            row["action"], row["subject"]
+        )
+    except Exception as exc:
+        with database() as connection:
+            connection.execute(
+                "UPDATE user_proposals SET status='failed', result=? WHERE id=?",
+                (str(exc)[:500], request.proposal_id),
+            )
+        audit(
+            {
+                "event": "user_action_failed",
+                "proposal_id": request.proposal_id,
+                "error": str(exc)[:500],
+            }
+        )
+        raise
+    with database() as connection:
+        connection.execute(
+            "UPDATE user_proposals SET status='completed', completed_at=?, result=? WHERE id=?",
+            (now, json.dumps(result), request.proposal_id),
+        )
+    audit(
+        {
+            "event": "user_action_completed",
+            "proposal_id": request.proposal_id,
+            "approved_by": request.approved_by,
+            **result,
+        }
+    )
+    return {"status": "completed", **result}
+
+
+@app.get(
+    "/user-actions",
+    operation_id="list_fortigate_user_action_audit",
+    dependencies=[Depends(require_action_key)],
+)
+async def list_user_actions(limit: int = 50) -> dict:
+    with database() as connection:
+        rows = connection.execute(
+            "SELECT id,action,subject,reason,requested_by,created_at,expires_at,status,"
+            "approved_by,completed_at,result FROM user_proposals "
+            "ORDER BY created_at DESC LIMIT ?",
+            (max(1, min(limit, 200)),),
+        ).fetchall()
+    return {"count": len(rows), "data": [dict(row) for row in rows]}
 
 
 @app.get("/actions", operation_id="list_fortigate_ip_action_audit", dependencies=[Depends(require_action_key)])
