@@ -30,8 +30,8 @@ or `/donkey_help`, do not call a tool. Reply with this concise menu:
 - **Reports:** concise estate summaries and scheduled morning operations reports
 
 **Examples:** “GPU load on Zabbix-Analyzer”, “problems on TORAKKA”,
-“24-hour CPU summary for himabot”, “block 203.0.113.10 inbound”,
-“unblock 203.0.113.10 inbound”, or “list monitored hosts”.
+“24-hour CPU summary for himabot”, “block <public-ip> inbound”,
+“unblock <public-ip> inbound”, or “list monitored hosts”.
 
 ## Zabbix-first monitoring policy
 
