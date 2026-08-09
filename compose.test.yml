@@ -7,7 +7,7 @@ services:
       ZABBIX_URL: ${ZABBIX_URL:-}
       ZABBIX_TOKEN: ${ZABBIX_TOKEN:-}
       ZABBIX_TRAFFIC_ITEM_KEY: ${ZABBIX_TRAFFIC_ITEM_KEY:-fortigate_summary.sh}
-      FORTIGATE_ZABBIX_HOST: ${FORTIGATE_ZABBIX_HOST:-himabot}
+      FORTIGATE_ZABBIX_HOST: ${FORTIGATE_ZABBIX_HOST:-fw1.kivela.work}
       FORTIGATE_URL: ${FORTIGATE_URL:-}
       FORTIGATE_TOKEN: ${FORTIGATE_TOKEN:-}
       FORTIGATE_VDOM: ${FORTIGATE_VDOM:-root}
@@ -34,7 +34,7 @@ services:
     environment:
       ZABBIX_TOOLS_URL: http://zabbix-tools:8000
       ZABBIX_TRAFFIC_ITEM_KEY: ${ZABBIX_TRAFFIC_ITEM_KEY:-fortigate_summary.sh}
-      FORTIGATE_ZABBIX_HOST: ${FORTIGATE_ZABBIX_HOST:-himabot}
+      FORTIGATE_ZABBIX_HOST: ${FORTIGATE_ZABBIX_HOST:-fw1.kivela.work}
     depends_on:
       zabbix-tools:
         condition: service_healthy
