@@ -28,7 +28,7 @@ class ZabbixClient:
         )
         self.timeout = httpx.Timeout(10.0, connect=3.0)
 
-    async def call(self, method: str, params: dict[str, Any]) -> list[dict[str, Any]]:
+    async def call(self, method: str, params: dict[str, Any]) -> Any:
         payload = {
             "jsonrpc": "2.0",
             "method": method,
@@ -61,8 +61,7 @@ class ZabbixClient:
             message = error.get("data") or error.get("message") or "Zabbix API error"
             raise ZabbixAPIError(str(message))
 
-        result = body.get("result")
-        if not isinstance(result, list):
+        if "result" not in body:
             raise ZabbixAPIError("Zabbix API returned an unexpected response")
-        return result
+        return body["result"]
 
