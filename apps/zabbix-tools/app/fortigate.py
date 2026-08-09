@@ -143,7 +143,9 @@ async def fortigate_status() -> dict[str, Any]:
     return {
         "hostname": results.get("hostname"),
         "model": results.get("model"),
-        "serial": results.get("serial"),
+        "serial": results.get("serial") or (
+            payload.get("serial") if isinstance(payload, dict) else None
+        ),
         "version": payload.get("version") if isinstance(payload, dict) else None,
         "build": payload.get("build") if isinstance(payload, dict) else None,
         "status": payload.get("status") if isinstance(payload, dict) else None,
@@ -192,7 +194,11 @@ async def fortigate_summary() -> dict[str, Any]:
         "device": {
             "hostname": status_results.get("hostname"),
             "model": status_results.get("model"),
-            "serial": status_results.get("serial"),
+            "serial": status_results.get("serial") or (
+                status_payload.get("serial")
+                if isinstance(status_payload, dict)
+                else None
+            ),
             "version": (
                 status_payload.get("version")
                 if isinstance(status_payload, dict)
