@@ -156,7 +156,7 @@ async def apply_action(action: str, ip: str, direction: str, reason: str) -> dic
         except FortiGateNotFound:
             await fg_request("POST", "/api/v2/cmdb/firewall/address", {
                 "name": name, "type": "ipmask", "subnet": f"{ip} 255.255.255.255",
-                "associated-interface": "any", "comment": f"404-Donkey: {reason}"[:255],
+                "comment": f"404-Donkey: {reason}"[:255],
             })
             created = True
         if name not in names:
