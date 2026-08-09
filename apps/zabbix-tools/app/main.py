@@ -10,6 +10,7 @@ from app.analytics import host_summary, router as analytics_router, trends, trig
 from app.documentation import documentation, router as documentation_router
 from app.drafts import router as drafts_router
 from app.host_analysis import (
+    gpu_brief,
     gpu_summary,
     host_period_summary,
     host_search,
@@ -254,7 +255,7 @@ async def history(
     summary="Stable read-only gateway for Zabbix data and documentation",
 )
 async def read_zabbix(
-    action: str = Query(..., pattern=r"^(capabilities|hosts|problems|items|history|host_summary|host_search|host_24h_summary|gpu_summary|traffic_summary|triggers|trends|documentation)$"),
+    action: str = Query(..., pattern=r"^(capabilities|hosts|problems|items|history|host_summary|host_search|host_24h_summary|gpu_brief|gpu_summary|traffic_summary|triggers|trends|documentation)$"),
     query: str = "",
     hostid: str = "",
     itemid: str = "",
@@ -274,7 +275,8 @@ async def read_zabbix(
                 "host_search": "Search hosts by technical or visible name using query.",
                 "host_summary": "Operational inventory summary using numeric hostid.",
                 "host_24h_summary": "CPU, memory, disk, network and recent-problem statistics; use query for host name or ID.",
-                "gpu_summary": "GPU values and period statistics; use query for host name or ID.",
+                "gpu_brief": "Concise current GPU utilization and temperature for comma-separated host names in query.",
+                "gpu_summary": "Detailed GPU values and period statistics; use query for host name or ID.",
                 "traffic_summary": "Parse a JSON traffic item; use query for host name or ID and optional item_key.",
                 "problems": "List current and recent problems.",
                 "items": "Find items by query and optional hostid.",
@@ -290,6 +292,10 @@ async def read_zabbix(
         return await host_search(query=query, limit=min(limit, 100))
     if action == "host_24h_summary":
         return await host_period_summary(host=query or hostid, hours=hours, items_per_category=min(20, max(1, limit // 20)))
+    if action == "gpu_brief":
+        if not query:
+            raise HTTPException(status_code=422, detail="gpu_brief requires host names in query")
+        return await gpu_brief(hosts=query)
     if action == "gpu_summary":
         return await gpu_summary(host=query or hostid, hours=hours)
     if action == "traffic_summary":
