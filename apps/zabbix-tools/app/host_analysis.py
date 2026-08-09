@@ -194,35 +194,90 @@ async def traffic_summary(
     host: str = Query(..., min_length=1, max_length=255),
     item_key: str = Query(""),
 ) -> dict[str, Any]:
-    item_key = item_key or os.getenv("ZABBIX_TRAFFIC_ITEM_KEY", "traffic.connections.json")
     resolved = await resolve_host(host)
-    data = await ZabbixClient().call(
-        "item.get",
-        {
-            "hostids": [str(resolved["hostid"])],
-            "output": ["itemid", "name", "key_", "lastvalue", "lastclock"],
-            "filter": {"key_": [item_key]},
-            "limit": 1,
-        },
+    hostid = str(resolved["hostid"])
+    client = ZabbixClient()
+
+    params: dict[str, Any] = {
+        "hostids": [hostid],
+        "output": ["itemid", "name", "key_", "value_type", "lastvalue", "lastclock", "state"],
+        "limit": 100,
+    }
+    configured_key = item_key or os.getenv("ZABBIX_TRAFFIC_ITEM_KEY", "")
+    if configured_key:
+        params["filter"] = {"key_": [configured_key]}
+        params["limit"] = 1
+    else:
+        params["search"] = {"name": "traffic", "key_": "traffic"}
+        params["searchByAny"] = True
+
+    data = await client.call("item.get", params)
+    candidates = data if isinstance(data, list) else []
+
+    selected: dict[str, Any] | None = None
+    payload: dict[str, Any] | None = None
+    preferred_keys = ("windows.traffic.out", "fortigate_summary.sh")
+    candidates.sort(
+        key=lambda row: (
+            str(row.get("key_")) not in preferred_keys,
+            not bool(row.get("lastvalue")),
+        )
     )
-    items = data if isinstance(data, list) else []
-    if not items:
-        raise HTTPException(status_code=404, detail="Traffic JSON item was not found")
-    try:
-        payload = json.loads(items[0].get("lastvalue", ""))
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=422, detail="Traffic item does not contain valid JSON") from exc
-    entries = payload.get("data", []) if isinstance(payload, dict) else []
-    processes = Counter(str(row.get("process", "unknown")) for row in entries)
-    remote_ips = Counter(str(row.get("r_ip", "unknown")) for row in entries)
-    remote_ports = Counter(str(row.get("r_port", "unknown")) for row in entries)
-    return {
-        "host": resolved,
-        "item": {key: items[0].get(key) for key in ("itemid", "name", "key_", "lastclock")},
-        "connections": len(entries),
-        "top_processes": processes.most_common(10),
-        "top_remote_ips": remote_ips.most_common(10),
-        "top_remote_ports": remote_ports.most_common(10),
-        "sample": entries[:15],
+    for item in candidates:
+        try:
+            decoded = json.loads(item.get("lastvalue", ""))
+        except (TypeError, ValueError):
+            continue
+        if isinstance(decoded, dict):
+            selected = item
+            payload = decoded
+            break
+
+    if selected is None or payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No populated JSON traffic item was found for this host",
+        )
+
+    item_info = {
+        key: selected.get(key)
+        for key in ("itemid", "name", "key_", "value_type", "lastclock", "state")
     }
 
+    entries = payload.get("data")
+    if isinstance(entries, list):
+        processes = Counter(str(row.get("process", "unknown")) for row in entries)
+        remote_ips = Counter(str(row.get("r_ip", "unknown")) for row in entries)
+        remote_ports = Counter(str(row.get("r_port", "unknown")) for row in entries)
+        return {
+            "schema": "connection_list",
+            "host": resolved,
+            "item": item_info,
+            "captured_at": payload.get("time"),
+            "connections": len(entries),
+            "top_processes": processes.most_common(10),
+            "top_remote_ips": remote_ips.most_common(10),
+            "top_remote_ports": remote_ports.most_common(10),
+            "sample": entries[:15],
+        }
+
+    if any(key in payload for key in ("deny_per_min", "top_attackers", "top_ports", "traffic")):
+        return {
+            "schema": "fortigate_aggregate",
+            "host": resolved,
+            "item": item_info,
+            "deny_per_min": payload.get("deny_per_min"),
+            "accept": payload.get("accept"),
+            "close": payload.get("close"),
+            "traffic": payload.get("traffic", {}),
+            "top_attackers": payload.get("top_attackers", [])[:10],
+            "top_ports": payload.get("top_ports", [])[:10],
+            "recent": payload.get("recent", [])[:15],
+        }
+
+    return {
+        "schema": "generic_json",
+        "host": resolved,
+        "item": item_info,
+        "data": payload,
+    }
