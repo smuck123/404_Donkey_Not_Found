@@ -1,0 +1,9 @@
+# Install as /etc/sysconfig/404-donkey-fortigate-api-summary with mode 600.
+# Never commit the real token.
+FORTIGATE_URL=https://192.168.0.1
+FORTIGATE_TOKEN=replace-with-read-only-api-token
+FORTIGATE_VDOM=root
+FORTIGATE_VERIFY_SSL=false
+
+ZABBIX_SERVER=127.0.0.1
+ZABBIX_HOST=fw1.kivela.work
