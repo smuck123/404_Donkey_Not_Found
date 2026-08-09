@@ -11,6 +11,10 @@ BASE_URL = os.getenv("ZABBIX_TOOLS_URL", "http://127.0.0.1:8889").rstrip("/")
 TIMEOUT = httpx.Timeout(15.0, connect=3.0)
 MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
 MCP_PORT = int(os.getenv("MCP_PORT", "8001"))
+DEFAULT_FIREWALL_ZABBIX_HOST = os.getenv("FORTIGATE_ZABBIX_HOST", "himabot").strip()
+DEFAULT_TRAFFIC_ITEM_KEY = os.getenv(
+    "ZABBIX_TRAFFIC_ITEM_KEY", "fortigate_summary.sh"
+).strip()
 
 # FastMCP 1.x configures its bind address when the server is created.
 # FastMCP.run() only selects the transport and does not accept host/port.
@@ -137,12 +141,16 @@ async def get_gpu_summary(host: str, hours: int = 24) -> dict[str, Any]:
 
 
 @mcp.tool()
-async def get_traffic_summary(host: str, item_key: str = "") -> dict[str, Any]:
-    """Get the parsed FortiGate traffic summary JSON for a host."""
+async def get_traffic_summary(host: str = "", item_key: str = "") -> dict[str, Any]:
+    """Get collected FortiGate traffic; defaults to the configured firewall host."""
+    selected_host = host.strip() or DEFAULT_FIREWALL_ZABBIX_HOST
+    selected_key = item_key.strip() or DEFAULT_TRAFFIC_ITEM_KEY
+    if not selected_host:
+        raise ValueError("A FortiGate Zabbix host must be configured")
     return await _read(
         "traffic_summary",
-        query=host,
-        item_key=item_key,
+        query=selected_host,
+        item_key=selected_key,
     )
 
 
