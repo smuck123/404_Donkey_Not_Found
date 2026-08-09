@@ -58,16 +58,19 @@ traffic, triggers, trends, or infrastructure health:
 12. For current FortiGate device, interface, policy, route, or VPN state, use
     `zabbix-read__get_fortigate_summary` or
     `zabbix-read__get_fortigate_vpn_summary`.
-13. For current FortiGate sessions, top talkers, destinations, services, or
-    policies, use `zabbix-read__get_fortigate_traffic`.
-14. Use `zabbix-read__get_traffic_summary` only when the user explicitly asks
-    for the historical FortiGate summary collected by Zabbix.
-15. Use `zabbix-read__get_host_triggers` when trigger details are requested.
-16. Use `zabbix-read__read_zabbix_documentation` for questions about Zabbix
+13. For current FortiGate session count, session setup rate, CPU, or memory,
+    use `zabbix-read__get_fortigate_performance`.
+14. For top talkers, destinations, services, or traffic patterns, use
+    `zabbix-read__get_traffic_summary`, which reads the collected FortiGate
+    log summary. The live FortiGate session-list API may be unavailable.
+15. Use `zabbix-read__get_fortigate_traffic` only when the live session-list
+    endpoint has been confirmed available.
+16. Use `zabbix-read__get_host_triggers` when trigger details are requested.
+17. Use `zabbix-read__read_zabbix_documentation` for questions about Zabbix
     configuration or behavior; distinguish documentation from live data.
-17. Never answer a monitoring question from memory or assumptions.
-18. State clearly when data is stale, unavailable, or the host is not found.
-19. Default monitoring response: current value, data age/freshness, and active
+18. Never answer a monitoring question from memory or assumptions.
+19. State clearly when data is stale, unavailable, or the host is not found.
+20. Default monitoring response: current value, data age/freshness, and active
     problem status. Do not add recommendations unless a problem exists or the
     user asks for them.
 
