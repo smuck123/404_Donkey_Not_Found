@@ -1,0 +1,592 @@
+zabbix_export:
+  version: '8.0'
+  template_groups:
+    - uuid: 6f3d2c1b9a8e4a7b8c9d0e1f2a3b4c5d
+      name: Templates/Custom
+  templates:
+    - uuid: f36c4782bb104e9587ed012dc55dad3b
+      template: 'Template Log Summary by Trapper'
+      name: 'Template Log Summary by Trapper'
+      description: |
+        Receives structured Linux log events and periodic AI-assisted log summaries
+        through local Zabbix trapper items. The real-time forwarder and five-minute
+        summary collector are independent and may be enabled separately.
+
+        Security: restrict {$TRAPPER.ALLOWED_HOSTS} to the collector source addresses.
+        Never expose trapper items to 0.0.0.0/0 or ::/0.
+      vendor:
+        name: 404-Donkey_not_found
+        version: 8.0-1
+      readme: |
+        ## Data paths
+
+        - linux.log.json receives individual JSON events from zabbix_log_forwarder.py.
+        - log.summary.raw receives donkey_log_summary_v2 JSON from log_summary.py.
+        - log.summary.text receives the concise human-readable summary.
+
+        The summary collector normally runs every five minutes. Attach this template
+        to the exact technical host name used by zabbix_sender.
+      groups:
+        - name: Templates/Custom
+      macros:
+        - macro: '{$TRAPPER.ALLOWED_HOSTS}'
+          value: '127.0.0.1,::1'
+          description: 'Comma-separated IP addresses allowed to submit trapper values.'
+      items:
+        - uuid: b1d1c0aa25984a98b576c03ab69d940e
+          name: 'Log summary linux'
+          type: TRAP
+          key: linux.log.json
+          history: 7d
+          value_type: JSON
+          allowed_hosts: '{$TRAPPER.ALLOWED_HOSTS}'
+          description: 'Individual structured Linux log events sent by the real-time zabbix_log_forwarder.py service.'
+          tags:
+            - tag: component
+              value: logs
+        - uuid: 4fe56ff97985452bb162ccfab7aeeffa
+          name: Messages_log_raw
+          type: TRAP
+          key: log.messages.json
+          value_type: JSON
+          status: DISABLED
+          allowed_hosts: '{$TRAPPER.ALLOWED_HOSTS}'
+          description: 'Deprecated compatibility item. Keep disabled unless an older sender still uses this key.'
+        - uuid: b18bad74ae324afba37a909abc35ad88
+          name: 'Log AI summary'
+          type: DEPENDENT
+          key: log.summary.ai_summary
+          description: 'Concise Ollama-generated explanation. Uses the deterministic summary when Ollama is unavailable.'
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.ai_summary
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: logs
+        - uuid: 84c810a1a5fe4bf89a24f7a8b707a672
+          name: 'Security attack type'
+          type: DEPENDENT
+          key: log.summary.attack_type
+          description: 'Detected attack classification, or none when no supported attack pattern is present.'
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.attack_type
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: security
+        - uuid: 1793b93507294e7cb09d5cdef7b0897a
+          name: 'Audit anomaly'
+          type: DEPENDENT
+          key: log.summary.audit_anom
+          description: 'Number of Linux Audit ANOM events during the current collection interval.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.audit_anom
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: security
+          triggers:
+            - uuid: 1b971205b13a44a0918208bd197153d5
+              expression: 'last(/Template Log Summary by Trapper/log.summary.audit_anom)>0'
+              name: 'Audit anomaly on {HOST.NAME}'
+              priority: HIGH
+        - uuid: d335316a205148cd95e6e1c9b8482e8c
+          name: 'Audit AVC denied'
+          type: DEPENDENT
+          key: log.summary.audit_avc_denied
+          description: 'Number of SELinux AVC denied events during the current collection interval.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.audit_avc_denied
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: security
+        - uuid: d7b10c31177446ec992d3032200582fb
+          name: 'Security breach suspected'
+          type: DEPENDENT
+          key: log.summary.breach_suspected
+          description: 'Numeric breach indicator: 1 means suspected and 0 means not suspected.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.breach_suspected
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: security
+          triggers:
+            - uuid: 06d6376ef45b4f5d8189707b827196b9
+              expression: 'last(/Template Log Summary by Trapper/log.summary.breach_suspected)=1'
+              name: 'Security breach suspected on {HOST.NAME}'
+              priority: DISASTER
+        - uuid: 1066847741314c349f45dacfda61eede
+          name: 'Cron missing script'
+          type: DEPENDENT
+          key: log.summary.cron_missing_script
+          description: 'Number of missing-file events associated with scheduled operations.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.cron_missing_script
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: operations
+          triggers:
+            - uuid: 43c80bc7d53d4a6f9aad3ed79f55710b
+              expression: 'last(/Template Log Summary by Trapper/log.summary.cron_missing_script)>0'
+              name: 'Cron script missing on {HOST.NAME}'
+              priority: AVERAGE
+        - uuid: 607ecd0edeb047719899fd19e241ed1f
+          name: 'Cron permission denied'
+          type: DEPENDENT
+          key: log.summary.cron_permission_denied
+          description: 'Number of permission-denied events associated with scheduled operations.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.cron_permission_denied
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: operations
+        - uuid: 44ed002ab65447e08e6d46756b9c3641
+          name: 'Custom connection problem'
+          type: DEPENDENT
+          key: log.summary.custom_connection_problem
+          description: 'Connection failures detected in configured custom application logs.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.custom_connection_problem
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: custom
+          triggers:
+            - uuid: 0a975d11a4764108a975877edf16ecc9
+              expression: 'last(/Template Log Summary by Trapper/log.summary.custom_connection_problem)>0'
+              name: 'Custom connection problems on {HOST.NAME}'
+              priority: WARNING
+        - uuid: 0efffc4ccb9e4eb1a269f72f459b0197
+          name: 'Custom error'
+          type: DEPENDENT
+          key: log.summary.custom_error
+          description: 'Errors detected in configured custom application logs.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.custom_error
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: custom
+        - uuid: 9f7a27ad81664da889a6b71daae4543d
+          name: 'DNF traceback'
+          type: DEPENDENT
+          key: log.summary.dnf_traceback
+          description: 'DNF or package-manager tracebacks detected in the interval.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.dnf_traceback
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: package
+        - uuid: 8327f31c16974ba1b35c3c6b76718fab
+          name: 'Firewall denied'
+          type: DEPENDENT
+          key: log.summary.firewall_denied
+          description: 'Firewall deny, reject, or drop events detected in the interval.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.firewall_denied
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: security
+        - uuid: e15c2935b44645a99bccc94de209ac56
+          name: 'Kernel I/O error'
+          type: DEPENDENT
+          key: log.summary.kernel_io_error
+          description: 'Kernel block or I/O error events detected in the interval.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.kernel_io_error
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: system
+        - uuid: 46e00265373f422396c19b27e312e015
+          name: 'Nginx 5xx'
+          type: DEPENDENT
+          key: log.summary.nginx_5xx
+          description: 'Nginx HTTP 5xx responses detected in the interval.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.nginx_5xx
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: web
+        - uuid: 9d55350e080c47da9076afde35737527
+          name: 'OOM killer'
+          type: DEPENDENT
+          key: log.summary.oom_killer
+          description: 'Linux out-of-memory killer events detected in the interval.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.oom_killer
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: system
+        - uuid: 943bbc6c415e44a98ab80fe4edb74fa9
+          name: 'PHP fatal'
+          type: DEPENDENT
+          key: log.summary.php_fatal
+          description: 'PHP fatal errors detected in the interval.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.php_fatal
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: web
+        - uuid: 20bc63f58a4e4abfad9b86de69c50232
+          name: 'Log summary raw'
+          type: TRAP
+          key: log.summary.raw
+          history: 31d
+          value_type: JSON
+          allowed_hosts: '{$TRAPPER.ALLOWED_HOSTS}'
+          description: 'Master donkey_log_summary_v2 JSON payload sent every five minutes by log_summary.py. All log.summary dependent items use this item.'
+          tags:
+            - tag: component
+              value: logs
+        - uuid: 2723fe351f02406e926be30bbd86e114
+          name: 'Package repo errors'
+          type: DEPENDENT
+          key: log.summary.repo_error
+          description: 'Package repository download, metadata, or signature errors detected in the interval.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.repo_error
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: package
+          triggers:
+            - uuid: 1baef326a1ad40a886d0cb8a7e1e3494
+              expression: 'last(/Template Log Summary by Trapper/log.summary.repo_error)>0'
+              name: 'Package repository errors on {HOST.NAME}'
+              priority: WARNING
+        - uuid: 218a2ef374624f0c8fa39474a25508ab
+          name: 'Service failures'
+          type: DEPENDENT
+          key: log.summary.service_failed
+          description: 'System service failure events detected in the interval.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.service_failed
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: system
+        - uuid: b92b1b19b14c4f8387f1fe3c24fd56e3
+          name: 'Log severity label'
+          type: DEPENDENT
+          key: log.summary.severity_label
+          description: 'Human-readable low, medium, or high severity calculated by the deterministic parser.'
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.severity_label
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: logs
+        - uuid: 77f32f8438cf425fa065250fca97974c
+          name: 'Log severity score'
+          type: DEPENDENT
+          key: log.summary.severity_score
+          description: 'Deterministic severity score from 0 to 100 for the current interval.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.severity_score
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: logs
+          triggers:
+            - uuid: da34e0c2d1cf4f2a84b0ac848862c3d3
+              expression: 'last(/Template Log Summary by Trapper/log.summary.severity_score)>=70'
+              name: 'High log severity on {HOST.NAME}'
+              priority: HIGH
+        - uuid: 5eaacd7b2a8b4a64b4e14a438efa0f47
+          name: 'SSH failed passwords'
+          type: DEPENDENT
+          key: log.summary.ssh_failed_password
+          description: 'Failed SSH password attempts detected in the interval.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.ssh_failed_password
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: security
+        - uuid: 44f05a5b6e1747b99d93fef22ccce9d4
+          name: 'SSH invalid users'
+          type: DEPENDENT
+          key: log.summary.ssh_invalid_user
+          description: 'SSH attempts using invalid user accounts detected in the interval.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.ssh_invalid_user
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: security
+        - uuid: 9695409b90e640d7808d2db6c412ac52
+          name: 'Log summary status'
+          type: DEPENDENT
+          key: log.summary.status
+          description: 'Collector execution status: ok or partial.'
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.status
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: logs
+        - uuid: 7b9a8375291a4905ad83ba7a9e7d7be1
+          name: 'Log summary text from JSON'
+          type: DEPENDENT
+          key: log.summary.summary_text
+          description: 'Deterministic text summary generated without relying on the language model.'
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.summary_text
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: logs
+        - uuid: 5a99a9d88fe54131a45a1b3e07967042
+          name: 'Log summary text'
+          type: TRAP
+          key: log.summary.text
+          history: 31d
+          value_type: TEXT
+          allowed_hosts: '{$TRAPPER.ALLOWED_HOSTS}'
+          description: 'One-line human-readable summary sent by log_summary.py.'
+          tags:
+            - tag: component
+              value: logs
+        - uuid: 9aa3332c8bda4f7c83942f0122ff0d1f
+          name: 'Log total new lines'
+          type: DEPENDENT
+          key: log.summary.total_new_lines
+          description: 'Number of new log lines analyzed during this collection interval.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.total_new_lines
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: logs
+        - uuid: 27c56f790c6a4faebf430eeba3d137cc
+          name: 'Zabbix active checks error'
+          type: DEPENDENT
+          key: log.summary.zabbix_active_checks_error
+          description: 'Zabbix active-check configuration or unknown-host errors detected in the interval.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.zabbix_active_checks_error
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: zabbix
+          triggers:
+            - uuid: 055cae2363ab44faa33420dd6c265673
+              expression: 'last(/Template Log Summary by Trapper/log.summary.zabbix_active_checks_error)>0'
+              name: 'Zabbix active checks issue on {HOST.NAME}'
+              priority: AVERAGE
+        - uuid: 903f0e9a81924d5aa581644eddca58f3
+          name: 'Zabbix allowed hosts reject'
+          type: DEPENDENT
+          key: log.summary.zabbix_allowed_hosts_reject
+          description: 'Connections rejected by Zabbix allowed-host restrictions.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.zabbix_allowed_hosts_reject
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: zabbix
+        - uuid: ff77063d22674999b4b494abda57ebb4
+          name: 'Zabbix permission denied'
+          type: DEPENDENT
+          key: log.summary.zabbix_permission_denied
+          description: 'Permission-denied events related to Zabbix components or scripts.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.zabbix_permission_denied
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: zabbix
+          triggers:
+            - uuid: b73055b044af4c259a9ba4ef5042b7b9
+              expression: 'last(/Template Log Summary by Trapper/log.summary.zabbix_permission_denied)>0'
+              name: 'Zabbix permission denied on {HOST.NAME}'
+              priority: HIGH
+        - uuid: 25cd8fb763574a45bf8f180420fba354
+          name: 'Zabbix sender failed'
+          type: DEPENDENT
+          key: log.summary.zabbix_sender_failed
+          description: 'Sender failures excluding the forwarder''s own feedback-loop messages.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.zabbix_sender_failed
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: zabbix
+          triggers:
+            - uuid: cbaeb309ac6946f181292e7e5483b9d6
+              expression: 'last(/Template Log Summary by Trapper/log.summary.zabbix_sender_failed)>0'
+              name: 'Zabbix sender failure on {HOST.NAME}'
+              priority: AVERAGE
+        - uuid: 0d7fe74145ab43d7b4ebecff23854a11
+          name: 'Log analysis source'
+          type: DEPENDENT
+          key: log.summary.analysis_source
+          value_type: CHAR
+          description: 'Shows ollama when AI analysis succeeded or deterministic when the safe fallback was used.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.analysis_source
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: logs
+        - uuid: 686fbca567e743cab354440440d06a73
+          name: 'Log summary period'
+          type: DEPENDENT
+          key: log.summary.period_seconds
+          units: s
+          description: 'Elapsed seconds between collector runs. Normally close to 300 seconds.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.period_seconds
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: logs
+        - uuid: f3755087a3c94461a3b8a99165b15143
+          name: 'Log lines dropped by safety cap'
+          type: DEPENDENT
+          key: log.summary.dropped_lines
+          description: 'Number of new lines not analyzed because a per-file safety cap was reached.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.dropped_lines
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: logs
+          triggers:
+            - uuid: 45152140699148729c7864a9ae93ae35
+              expression: 'last(/Template Log Summary by Trapper/log.summary.dropped_lines)>0'
+              name: 'Log summary input safety cap reached on {HOST.NAME}'
+              priority: WARNING
+              description: 'At least one log file produced more lines than the collector safety limit during one interval.'
+        - uuid: b65009f406dd4ac5a704bf4e8fcab55c
+          name: 'Ignored collector self-noise'
+          type: DEPENDENT
+          key: log.summary.self_noise_ignored
+          description: 'Number of old forwarder or summary-pipeline messages deliberately excluded to prevent feedback loops.'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.counts_flat.self_noise_ignored
+          master_item:
+            key: log.summary.raw
+          tags:
+            - tag: component
+              value: logs
+      tags:
+        - tag: class
+          value: logs
+        - tag: target
+          value: linux
+  triggers:
+    - uuid: 0d215529a73748108e410f19a4f47fcc
+      expression: 'last(/Template Log Summary by Trapper/log.summary.ssh_failed_password)>=20 and last(/Template Log Summary by Trapper/log.summary.ssh_invalid_user)>=5'
+      name: 'SSH brute-force signs on {HOST.NAME}'
+      priority: HIGH
