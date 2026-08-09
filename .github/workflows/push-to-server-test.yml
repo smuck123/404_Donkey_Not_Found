@@ -1,0 +1,29 @@
+name: Push marker to TEST server
+
+on:
+  push:
+    branches:
+      - test
+  workflow_dispatch:
+
+jobs:
+  copy-marker:
+    runs-on:
+      - self-hosted
+      - linux
+      - x64
+      - ai-server
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Copy marker to test directory
+        run: |
+          mkdir -p /opt/ai-stack/test
+          cp push-to-server-test.txt /opt/ai-stack/test/push-to-server-test.txt
+
+      - name: Verify copied file
+        run: |
+          test -f /opt/ai-stack/test/push-to-server-test.txt
+          cat /opt/ai-stack/test/push-to-server-test.txt
