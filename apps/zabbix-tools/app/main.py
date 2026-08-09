@@ -10,6 +10,11 @@ from app.analytics import host_summary, router as analytics_router, trends, trig
 from app.documentation import documentation, router as documentation_router
 from app.drafts import router as drafts_router
 from app.overview import router as overview_router
+from app.fortigate import (
+    FortiGateAPIError,
+    FortiGateConfigurationError,
+    router as fortigate_router,
+)
 from app.host_analysis import (
     gpu_brief,
     gpu_summary,
@@ -21,10 +26,11 @@ from app.host_analysis import (
 from app.zabbix import ConfigurationError, ZabbixAPIError, ZabbixClient
 
 
-app = FastAPI(title="Donkey Zabbix Tools", version="0.4.0")
+app = FastAPI(title="Donkey Infrastructure Tools", version="0.5.0")
 app.include_router(analytics_router)
 app.include_router(documentation_router)
 app.include_router(drafts_router)
+app.include_router(fortigate_router)
 app.include_router(host_analysis_router)
 app.include_router(overview_router)
 
@@ -44,6 +50,18 @@ async def configuration_error(_: Request, exc: ConfigurationError) -> JSONRespon
 @app.exception_handler(ZabbixAPIError)
 async def zabbix_error(_: Request, exc: ZabbixAPIError) -> JSONResponse:
     return error_response(exc.status_code, "zabbix_api_error", str(exc))
+
+
+@app.exception_handler(FortiGateConfigurationError)
+async def fortigate_configuration_error(
+    _: Request, exc: FortiGateConfigurationError
+) -> JSONResponse:
+    return error_response(503, "fortigate_configuration_error", str(exc))
+
+
+@app.exception_handler(FortiGateAPIError)
+async def fortigate_api_error(_: Request, exc: FortiGateAPIError) -> JSONResponse:
+    return error_response(exc.status_code, "fortigate_api_error", str(exc))
 
 
 @app.exception_handler(RequestValidationError)
