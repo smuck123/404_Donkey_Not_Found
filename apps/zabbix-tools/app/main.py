@@ -5,10 +5,16 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.analytics import router as analytics_router
+from app.documentation import router as documentation_router
+from app.drafts import router as drafts_router
 from app.zabbix import ConfigurationError, ZabbixAPIError, ZabbixClient
 
 
-app = FastAPI(title="Donkey Zabbix Tools", version="0.2.0")
+app = FastAPI(title="Donkey Zabbix Tools", version="0.3.0")
+app.include_router(analytics_router)
+app.include_router(documentation_router)
+app.include_router(drafts_router)
 
 
 def error_response(status_code: int, code: str, message: str) -> JSONResponse:
