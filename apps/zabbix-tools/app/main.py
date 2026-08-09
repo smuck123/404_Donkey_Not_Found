@@ -1,3 +1,5 @@
+import json
+import time
 from typing import Any
 
 from fastapi import FastAPI, Query, Request
@@ -26,7 +28,7 @@ from app.host_analysis import (
 from app.zabbix import ConfigurationError, ZabbixAPIError, ZabbixClient
 
 
-app = FastAPI(title="Donkey Infrastructure Tools", version="0.5.0")
+app = FastAPI(title="Donkey Infrastructure Tools", version="0.6.0")
 app.include_router(analytics_router)
 app.include_router(documentation_router)
 app.include_router(drafts_router)
@@ -199,6 +201,10 @@ async def items(
         min_length=1,
         description="Optional numeric Zabbix host ID",
     ),
+    include_templates: bool = Query(
+        False,
+        description="Include item definitions that belong to templates",
+    ),
     limit: int = Query(100, ge=1, le=500),
 ) -> dict[str, Any]:
     params: dict[str, Any] = {
@@ -215,6 +221,7 @@ async def items(
             "units",
         ],
         "selectHosts": ["hostid", "host", "name", "status"],
+        "templated": include_templates,
         "sortfield": "name",
         "limit": limit,
     }
@@ -270,12 +277,151 @@ async def history(
 
 
 @app.get(
+    "/fortigate/api-brief",
+    operation_id="get_fortigate_api_brief",
+    summary="Get validated FortiGate API values collected through Zabbix",
+    description=(
+        "Return a concise, read-only FortiGate health and inventory summary from "
+        "fortigate.api.* Zabbix items. Measurements are returned only when the "
+        "collection status is ok, preventing missing values from appearing as zero."
+    ),
+)
+async def fortigate_api_brief(
+    host: str = Query(
+        "fw1.kivela.work",
+        min_length=1,
+        max_length=255,
+        description="Zabbix technical or visible host name",
+    ),
+) -> dict[str, Any]:
+    host_rows = await ZabbixClient().call(
+        "host.get",
+        {
+            "output": ["hostid", "host", "name", "status"],
+            "search": {"host": host, "name": host},
+            "searchByAny": True,
+            "searchWildcardsEnabled": False,
+            "limit": 20,
+        },
+    )
+    exact = [
+        row for row in host_rows
+        if host.casefold() in {
+            str(row.get("host", "")).casefold(),
+            str(row.get("name", "")).casefold(),
+        }
+    ]
+    if not host_rows:
+        raise HTTPException(status_code=404, detail="FortiGate Zabbix host was not found")
+    selected = (exact or host_rows)[0]
+    hostid = str(selected.get("hostid", ""))
+
+    item_rows = await ZabbixClient().call(
+        "item.get",
+        {
+            "output": [
+                "itemid", "name", "key_", "value_type", "units", "state",
+                "status", "lastvalue", "lastclock",
+            ],
+            "hostids": [hostid],
+            "templated": False,
+            "search": {"key_": "fortigate.api."},
+            "searchWildcardsEnabled": False,
+            "sortfield": "key_",
+            "limit": 100,
+        },
+    )
+    by_key = {str(row.get("key_", "")): row for row in item_rows}
+    status_item = by_key.get("fortigate.api.collection_status", {})
+    raw_item = by_key.get("fortigate.api.raw", {})
+    collection_status = str(status_item.get("lastvalue", "")).strip().lower()
+    lastclock = max(
+        int(str(status_item.get("lastclock", "0")) or 0),
+        int(str(raw_item.get("lastclock", "0")) or 0),
+    )
+    age_seconds = max(0, int(time.time()) - lastclock) if lastclock else None
+    fresh = age_seconds is not None and age_seconds <= 900
+    data_valid = collection_status == "ok" and fresh
+
+    raw_payload: dict[str, Any] = {}
+    try:
+        parsed = json.loads(str(raw_item.get("lastvalue", "")))
+        if isinstance(parsed, dict):
+            raw_payload = parsed
+    except (TypeError, ValueError, json.JSONDecodeError):
+        pass
+
+    def value(key: str) -> Any:
+        row = by_key.get(key)
+        if not row or str(row.get("state", "0")) != "0":
+            return None
+        if int(str(row.get("lastclock", "0")) or 0) <= 0:
+            return None
+        return row.get("lastvalue")
+
+    inventory = {}
+    metrics = {}
+    if data_valid:
+        inventory = {
+            "hostname": value("fortigate.api.device.hostname"),
+            "model": value("fortigate.api.device.model"),
+            "serial": value("fortigate.api.device.serial"),
+            "version": value("fortigate.api.device.version"),
+            "build": value("fortigate.api.device.build"),
+            "interfaces_total": value("fortigate.api.interfaces.total"),
+            "interfaces_up": value("fortigate.api.interfaces.up"),
+            "interfaces_down": value("fortigate.api.interfaces.down"),
+            "down_interface_names": value("fortigate.api.interfaces.down_names"),
+            "policies_total": value("fortigate.api.policies.total"),
+            "policies_enabled": value("fortigate.api.policies.enabled"),
+            "policies_disabled": value("fortigate.api.policies.disabled"),
+            "static_routes": value("fortigate.api.routes.static_total"),
+            "vpn_phase1": value("fortigate.api.vpn.phase1_total"),
+            "vpn_phase2": value("fortigate.api.vpn.phase2_total"),
+        }
+        metrics = {
+            "sessions": value("fortigate.api.performance.sessions"),
+            "session_setup_rate": value("fortigate.api.performance.setuprate"),
+            "cpu_percent": value("fortigate.api.performance.cpu"),
+            "memory_percent": value("fortigate.api.performance.memory"),
+        }
+
+    warning = None
+    if not fresh:
+        warning = "FortiGate API data is missing or older than 15 minutes."
+    elif collection_status != "ok":
+        warning = (
+            f"FortiGate API collection status is {collection_status or 'unknown'}; "
+            "measurement values are withheld because they may be incomplete."
+        )
+
+    return {
+        "response_style": (
+            "Answer in at most three bullets. Report collection health first. "
+            "Use inventory and metrics only when data_valid is true. Never "
+            "interpret missing values as zero."
+        ),
+        "host": selected,
+        "collection_status": collection_status or "unknown",
+        "generated_at": raw_payload.get("generated_at"),
+        "lastclock": lastclock,
+        "age_seconds": age_seconds,
+        "fresh": fresh,
+        "data_valid": data_valid,
+        "warning": warning,
+        "errors": raw_payload.get("errors", {}),
+        "inventory": inventory,
+        "metrics": metrics,
+    }
+
+
+@app.get(
     "/read",
     operation_id="read_zabbix",
     summary="Stable read-only gateway for Zabbix data and documentation",
 )
 async def read_zabbix(
-    action: str = Query(..., pattern=r"^(capabilities|hosts|problems|items|history|host_summary|host_search|host_24h_summary|gpu_brief|gpu_summary|traffic_summary|triggers|trends|documentation)$"),
+    action: str = Query(..., pattern=r"^(capabilities|hosts|problems|items|history|host_summary|host_search|host_24h_summary|gpu_brief|gpu_summary|traffic_summary|fortigate_api_brief|triggers|trends|documentation)$"),
     query: str = "",
     hostid: str = "",
     itemid: str = "",
@@ -298,6 +444,7 @@ async def read_zabbix(
                 "gpu_brief": "Concise current GPU utilization and temperature for comma-separated host names in query.",
                 "gpu_summary": "Detailed GPU values and period statistics; use query for host name or ID.",
                 "traffic_summary": "Parse a JSON traffic item; use query for host name or ID and optional item_key.",
+                "fortigate_api_brief": "Validated FortiGate API health, inventory and performance values collected through Zabbix.",
                 "problems": "List current and recent problems.",
                 "items": "Find items by query and optional hostid.",
                 "history": "Read raw history using itemid and history value type.",
@@ -320,6 +467,8 @@ async def read_zabbix(
         return await gpu_summary(host=query or hostid, hours=hours)
     if action == "traffic_summary":
         return await traffic_summary(host=query or hostid, item_key=item_key)
+    if action == "fortigate_api_brief":
+        return await fortigate_api_brief(host=query or "fw1.kivela.work")
     if action == "hosts":
         return await hosts(limit=min(limit, 1000))
     if action == "problems":
