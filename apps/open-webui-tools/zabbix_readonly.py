@@ -1,123 +1,76 @@
 """
-title: Zabbix Read Only
+title: Zabbix Read Only Stable
 author: 404 Donkey Not Found
-description: Read-only access to Zabbix hosts, problems, item discovery, and history.
-version: 0.2.1
+description: Stable read-only gateway for Zabbix monitoring data and official documentation.
+version: 1.0.0
 """
 
 import json
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
 class Tools:
-    def __init__(self):
-        self.base_url = "http://127.0.0.1:8889"
-        self.timeout = 20
+    def read_zabbix(
+        self,
+        action: str,
+        query: str = "",
+        hostid: str = "",
+        itemid: str = "",
+        history: int = 0,
+        time_from: int = 0,
+        time_till: int = 0,
+        limit: int = 100,
+    ) -> dict:
+        """
+        Read Zabbix monitoring data or official Zabbix 8.0 documentation.
 
-    def _get(self, path: str, parameters: dict = None) -> dict:
-        query = urlencode(
-            {
-                key: value
-                for key, value in (parameters or {}).items()
-                if value is not None
-            }
-        )
-        url = f"{self.base_url}{path}"
-        if query:
-            url = f"{url}?{query}"
+        Allowed actions:
+        hosts - list hosts.
+        problems - list current and recent problems.
+        items - find items using query and optional hostid.
+        history - retrieve item history using numeric itemid and history value type.
+        host_summary - summarize one numeric hostid.
+        triggers - list problem triggers for one numeric hostid.
+        trends - retrieve aggregated trends for one numeric itemid.
+        documentation - read an official manual path supplied in query, for
+        example api/reference/item/get.
 
+        Zabbix host status 0 means enabled/monitored and 1 means
+        disabled/unmonitored. Trust status_label and monitored in responses.
+        This function is read-only and must never claim that it changed Zabbix.
+
+        :param action: One allowed action name from the list above.
+        :param query: Search text, or a Zabbix 8.0 manual path for documentation.
+        :param hostid: Numeric Zabbix host ID when required.
+        :param itemid: Numeric Zabbix item ID when required.
+        :param history: Zabbix item value_type for history calls.
+        :param time_from: Optional Unix start timestamp for trends; use 0 to omit.
+        :param time_till: Optional Unix end timestamp for trends; use 0 to omit.
+        :param limit: Maximum result count, normally 1 through 1000.
+        """
+        parameters = {
+            "action": action,
+            "query": query,
+            "hostid": hostid,
+            "itemid": itemid,
+            "history": history,
+            "limit": max(1, min(limit, 1000)),
+        }
+        if time_from > 0:
+            parameters["time_from"] = time_from
+        if time_till > 0:
+            parameters["time_till"] = time_till
+
+        url = "http://127.0.0.1:8889/read?" + urlencode(parameters)
         request = Request(url, method="GET", headers={"Accept": "application/json"})
         try:
-            with urlopen(request, timeout=self.timeout) as response:
+            with urlopen(request, timeout=30) as response:
                 return json.loads(response.read().decode("utf-8"))
-        except HTTPError as error:
-            try:
-                details = json.loads(error.read().decode("utf-8"))
-            except Exception:
-                details = {"message": str(error)}
-            return {
-                "error": {
-                    "code": "zabbix_service_http_error",
-                    "status": error.code,
-                    "details": details,
-                }
-            }
-        except (URLError, TimeoutError) as error:
-            return {
-                "error": {
-                    "code": "zabbix_service_unavailable",
-                    "message": str(error),
-                }
-            }
         except Exception as error:
             return {
                 "error": {
-                    "code": "zabbix_tool_error",
+                    "code": "zabbix_read_error",
                     "message": str(error),
                 }
             }
-
-    def get_zabbix_hosts(self, limit: int = 100) -> dict:
-        """
-        List Zabbix hosts. Trust the returned enabled, monitored, and
-        status_label fields. Zabbix raw host status 0 means enabled/monitored
-        and raw status 1 means disabled/unmonitored.
-
-        :param limit: Maximum number of hosts to return, from 1 to 1000.
-        """
-        limit = max(1, min(limit, 1000))
-        return self._get("/hosts", {"limit": limit})
-
-    def get_zabbix_problems(self, limit: int = 100) -> dict:
-        """
-        Get current and recent Zabbix problems and alerts.
-
-        :param limit: Maximum number of problems to return, from 1 to 500.
-        """
-        limit = max(1, min(limit, 500))
-        return self._get("/problems", {"limit": limit})
-
-    def get_zabbix_items(
-        self,
-        query: str,
-        hostid: str = "",
-        limit: int = 100,
-    ) -> dict:
-        """
-        Find Zabbix items and their numeric item IDs before requesting history.
-        Search by a human-readable item name or key fragment. Optionally limit
-        results to a numeric host ID. Use the returned itemid and value_type
-        with get_zabbix_item_history.
-
-        :param query: Item name or key fragment, for example fgSysSesCount.
-        :param hostid: Optional numeric Zabbix host ID.
-        :param limit: Maximum number of matching items, from 1 to 500.
-        """
-        limit = max(1, min(limit, 500))
-        return self._get(
-            "/items",
-            {"query": query, "hostid": hostid, "limit": limit},
-        )
-
-    def get_zabbix_item_history(
-        self,
-        itemid: str,
-        history: int = 0,
-        limit: int = 100,
-    ) -> dict:
-        """
-        Get recent history for a numeric Zabbix item ID. First call
-        get_zabbix_items and use its returned itemid and value_type. Pass
-        value_type as the history argument.
-
-        :param itemid: Numeric Zabbix item ID returned by get_zabbix_items.
-        :param history: Zabbix value_type returned by get_zabbix_items.
-        :param limit: Maximum number of history values to return.
-        """
-        limit = max(1, min(limit, 1000))
-        return self._get(
-            "/history",
-            {"itemid": itemid, "history": history, "limit": limit},
-        )
