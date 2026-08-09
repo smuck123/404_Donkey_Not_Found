@@ -309,17 +309,19 @@ async def get_morning_report(
 
     traffic = None
     if firewall_host.strip():
+        traffic = {}
         try:
-            traffic = {
-                "configuration": await _get("/fortigate/summary"),
-                "performance": await _get("/fortigate/performance-summary"),
-                "sessions": await _get(
-                    "/fortigate/traffic-summary",
-                    {"count": 500, "ip_version": "ipv4"},
-                ),
-            }
+            traffic["configuration"] = await _get("/fortigate/summary")
+            traffic["performance"] = await _get("/fortigate/performance-summary")
         except (httpx.HTTPError, ValueError) as exc:
-            traffic = {"error": str(exc)}
+            traffic["direct_api_error"] = str(exc)
+        try:
+            traffic["historical_log_summary"] = await _read(
+                "traffic_summary",
+                query=firewall_host.strip(),
+            )
+        except (httpx.HTTPError, ValueError) as exc:
+            traffic["historical_summary_error"] = str(exc)
 
     return {
         "response_style": (
