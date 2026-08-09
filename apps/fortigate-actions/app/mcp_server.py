@@ -37,6 +37,52 @@ async def confirm_ip_action(proposal_id: str, confirmation_code: str, approved_b
 
 
 @mcp.tool()
+async def propose_user_action(
+    action: str,
+    subject: str,
+    reason: str,
+    requested_by: str,
+) -> dict[str, Any]:
+    """Preview block, unblock, slow, or restore for the fixed Big or Bee aliases. This never changes the firewall."""
+    return await request(
+        "POST",
+        "/user-actions/preview",
+        {
+            "action": action,
+            "subject": subject,
+            "reason": reason,
+            "requested_by": requested_by,
+        },
+    )
+
+
+@mcp.tool()
+async def confirm_user_action(
+    proposal_id: str,
+    confirmation_code: str,
+    approved_by: str,
+) -> dict[str, Any]:
+    """Execute a previously previewed Big or Bee action only after the human supplies its exact code in a later message."""
+    return await request(
+        "POST",
+        "/user-actions/confirm",
+        {
+            "proposal_id": proposal_id,
+            "confirmation_code": confirmation_code,
+            "approved_by": approved_by,
+        },
+    )
+
+
+@mcp.tool()
+async def list_user_actions(limit: int = 50) -> dict[str, Any]:
+    """List recent pending, completed, expired, and failed Big or Bee actions."""
+    return await request(
+        "GET", f"/user-actions?limit={max(1, min(limit, 200))}"
+    )
+
+
+@mcp.tool()
 async def list_ip_actions(limit: int = 50) -> dict[str, Any]:
     """List recent pending, completed, expired, and failed firewall actions."""
     return await request("GET", f"/actions?limit={max(1, min(limit, 200))}")
