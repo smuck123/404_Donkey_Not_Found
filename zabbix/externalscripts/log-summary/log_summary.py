@@ -198,7 +198,7 @@ def run(args: argparse.Namespace) -> int:
         file_results.append({"path": str(path), "new_lines_analyzed": len(lines), "dropped_lines": dropped, "counts": dict(counts), "top_unmatched": [{"message": text, "count": count} for text, count in samples.most_common(3)]})
 
     severity_score = score(totals)
-    breach = bool(totals["audit_anom"] or (totals["ssh_failed_password"] >= 20 and totals["ssh_invalid_user"] >= 5))
+    breach = int(bool(totals["audit_anom"] or (totals["ssh_failed_password"] >= 20 and totals["ssh_invalid_user"] >= 5)))
     attack_type = "audit_anomaly" if totals["audit_anom"] else "ssh_bruteforce" if breach else "none"
     stable_counts = {name: int(totals.get(name, 0)) for name in RULES}
     stable_counts["self_noise_ignored"] = int(totals.get("self_noise_ignored", 0))
