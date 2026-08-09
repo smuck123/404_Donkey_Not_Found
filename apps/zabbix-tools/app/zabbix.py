@@ -33,7 +33,6 @@ class ZabbixClient:
             "jsonrpc": "2.0",
             "method": method,
             "params": params,
-            "auth": self.token,
             "id": 1,
         }
         try:
@@ -41,7 +40,10 @@ class ZabbixClient:
                 response = await client.post(
                     self.url,
                     json=payload,
-                    headers={"Content-Type": "application/json-rpc"},
+                    headers={
+                        "Content-Type": "application/json-rpc",
+                        "Authorization": f"Bearer {self.token}",
+                    },
                 )
                 response.raise_for_status()
         except httpx.TimeoutException as exc:
