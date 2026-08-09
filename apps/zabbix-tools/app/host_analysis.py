@@ -479,8 +479,9 @@ async def internet_traffic_summary(
             "Answer in at most six bullets. Separate traffic to the Internet "
             "(outbound) from traffic from the Internet (inbound). Include total "
             "events and top destination IP, country, service, and port when "
-            "available. State data age. Do not call the live FortiGate session "
-            "API and do not invent categories absent from the response."
+            "available. State data age. Traffic comes from Zabbix SOC data; "
+            "live read-only FortiGate health may be reported separately. Do not "
+            "invent categories absent from the response."
         ),
         "source": "zabbix_collected_fortigate_soc",
         "live_session_api_required": False,
