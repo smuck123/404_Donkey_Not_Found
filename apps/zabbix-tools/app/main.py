@@ -1,12 +1,13 @@
 from typing import Any
 
 from fastapi import FastAPI, Query, Request
+from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.analytics import router as analytics_router
-from app.documentation import router as documentation_router
+from app.analytics import host_summary, router as analytics_router, trends, triggers
+from app.documentation import documentation, router as documentation_router
 from app.drafts import router as drafts_router
 from app.zabbix import ConfigurationError, ZabbixAPIError, ZabbixClient
 
@@ -237,3 +238,51 @@ async def history(
         },
     )
     return result(data)
+
+
+@app.get(
+    "/read",
+    operation_id="read_zabbix",
+    summary="Stable read-only gateway for Zabbix data and documentation",
+)
+async def read_zabbix(
+    action: str = Query(..., pattern=r"^(hosts|problems|items|history|host_summary|triggers|trends|documentation)$"),
+    query: str = "",
+    hostid: str = "",
+    itemid: str = "",
+    history_type: int = Query(0, alias="history", ge=0, le=5),
+    time_from: int | None = Query(None, ge=0),
+    time_till: int | None = Query(None, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+) -> dict[str, Any]:
+    """Dispatch only explicitly allowlisted read operations."""
+    if action == "hosts":
+        return await hosts(limit=min(limit, 1000))
+    if action == "problems":
+        return await problems(limit=min(limit, 500))
+    if action == "items":
+        return await items(query=query or None, hostid=hostid or None, limit=min(limit, 500))
+    if action == "history":
+        if not itemid.isdigit():
+            raise HTTPException(status_code=422, detail="history requires a numeric itemid")
+        return await history(itemid=itemid, history_type=history_type, limit=limit)
+    if action == "host_summary":
+        if not hostid.isdigit():
+            raise HTTPException(status_code=422, detail="host_summary requires a numeric hostid")
+        return await host_summary(hostid=hostid)
+    if action == "triggers":
+        if not hostid.isdigit():
+            raise HTTPException(status_code=422, detail="triggers requires a numeric hostid")
+        return await triggers(hostid=hostid, only_problems=True, limit=min(limit, 500))
+    if action == "trends":
+        if not itemid.isdigit():
+            raise HTTPException(status_code=422, detail="trends requires a numeric itemid")
+        return await trends(
+            itemid=itemid,
+            time_from=time_from,
+            time_till=time_till,
+            limit=limit,
+        )
+    if action == "documentation":
+        return await documentation(path=query, max_chars=min(50000, max(1000, limit * 200)))
+    raise HTTPException(status_code=422, detail="Unsupported read action")
