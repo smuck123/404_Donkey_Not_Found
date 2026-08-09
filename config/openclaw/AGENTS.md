@@ -55,11 +55,14 @@ traffic, triggers, trends, or infrastructure health:
 10. Use `zabbix-read__find_items` and `zabbix-read__get_item_history` only
    when a specific metric or raw history is required.
 11. Use `zabbix-read__get_item_trends` for aggregated historical values.
-12. For current FortiGate device, interface, policy, route, or VPN state, use
-    `zabbix-read__get_fortigate_summary` or
-    `zabbix-read__get_fortigate_vpn_summary`.
-13. For current FortiGate session count, session setup rate, CPU, or memory,
-    use `zabbix-read__get_fortigate_performance`.
+12. For FortiGate health, inventory, CPU, memory, sessions, interfaces,
+    policies, routes, or VPN values collected through Zabbix, first call
+    `zabbix-read__get_fortigate_zabbix_brief`. Follow its `response_style`
+    and never report metrics when `data_valid` is false.
+13. Use `zabbix-read__get_fortigate_summary`,
+    `zabbix-read__get_fortigate_vpn_summary`, or
+    `zabbix-read__get_fortigate_performance` only when the user explicitly
+    requests a live direct-API reading.
 14. For top talkers, destinations, services, or traffic patterns, use
     `zabbix-read__get_traffic_summary`, which reads the collected FortiGate
     log summary. The live FortiGate session-list API may be unavailable.
