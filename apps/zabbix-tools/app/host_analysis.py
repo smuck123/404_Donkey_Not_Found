@@ -326,6 +326,197 @@ async def traffic_summary(
     }
 
 
+def _compact_json(value: Any, depth: int = 0) -> Any:
+    """Bound nested SOC payloads so small local models receive useful context."""
+    if depth >= 4:
+        return value if not isinstance(value, (dict, list)) else "nested data omitted"
+    if isinstance(value, list):
+        return [_compact_json(row, depth + 1) for row in value[:10]]
+    if isinstance(value, dict):
+        return {
+            str(key): _compact_json(item, depth + 1)
+            for key, item in list(value.items())[:30]
+        }
+    return value
+
+
+def _find_nested(value: Any, aliases: set[str], depth: int = 0) -> Any:
+    if depth > 5:
+        return None
+    if isinstance(value, dict):
+        for key, nested in value.items():
+            normalized = str(key).lower().replace("-", "_").replace(" ", "_")
+            if normalized in aliases and nested not in (None, "", [], {}):
+                return nested
+        for nested in value.values():
+            found = _find_nested(nested, aliases, depth + 1)
+            if found not in (None, "", [], {}):
+                return found
+    elif isinstance(value, list):
+        for nested in value[:20]:
+            found = _find_nested(nested, aliases, depth + 1)
+            if found not in (None, "", [], {}):
+                return found
+    return None
+
+
+@router.get(
+    "/internet-traffic-summary",
+    operation_id="get_zabbix_internet_traffic_summary",
+)
+async def internet_traffic_summary(
+    host: str = Query("fw1.kivela.work", min_length=1, max_length=255),
+) -> dict[str, Any]:
+    """Summarize Internet traffic from FortiGate SOC values already stored in Zabbix."""
+    resolved = await resolve_host(host)
+    keys = [
+        "fortigate.soc.rich_summary",
+        "fortigate.top_internal_to_external_destinations_enriched",
+        "fortigate.top_external_attackers_enriched",
+        "fortigate.grouped_destination_names",
+        "fortigate.grouped_destination_owners",
+        "fortigate.denied_port_heatmap",
+        "fortigate.policy_summary",
+        "fortigate.suspicious_country_scores",
+        "fortigate.expected_vs_unexpected",
+        "fortigate.total_events",
+        "fortigate.parse_errors",
+        "fortigate.ollama.summary",
+    ]
+    data = await ZabbixClient().call(
+        "item.get",
+        {
+            "hostids": [str(resolved["hostid"])],
+            "output": [
+                "itemid", "name", "key_", "value_type", "lastvalue",
+                "lastclock", "state", "status", "units",
+            ],
+            "filter": {"key_": keys, "status": 0},
+            "sortfield": "key_",
+            "limit": len(keys),
+        },
+    )
+    rows = data if isinstance(data, list) else []
+    decoded: dict[str, Any] = {}
+    freshness: dict[str, Any] = {}
+    for row in rows:
+        key = str(row.get("key_", ""))
+        raw = row.get("lastvalue")
+        if raw in (None, "") or str(row.get("state", "0")) != "0":
+            continue
+        try:
+            value = json.loads(str(raw))
+        except (TypeError, ValueError):
+            value = raw
+        decoded[key] = value
+        age = item_age_seconds(row)
+        freshness[key] = {
+            "lastclock": int(str(row.get("lastclock", "0")) or 0),
+            "age_seconds": age,
+            "fresh": age is not None and age <= 900,
+        }
+
+    rich = decoded.get("fortigate.soc.rich_summary", {})
+    outbound = decoded.get(
+        "fortigate.top_internal_to_external_destinations_enriched", []
+    )
+    inbound = decoded.get("fortigate.top_external_attackers_enriched", [])
+    port_heatmap = decoded.get("fortigate.denied_port_heatmap", [])
+    policy_summary = decoded.get("fortigate.policy_summary", [])
+    country_scores = decoded.get("fortigate.suspicious_country_scores", [])
+
+    top_destination_ips = _find_nested(
+        rich,
+        {
+            "top_destination_ips", "destination_ips", "top_destinations",
+            "external_destinations", "destinations",
+        },
+    )
+    top_destination_countries = _find_nested(
+        rich,
+        {
+            "top_destination_countries", "destination_countries",
+            "top_countries", "countries",
+        },
+    )
+    top_destination_services = _find_nested(
+        rich,
+        {
+            "top_destination_services", "destination_services",
+            "top_services", "services", "applications",
+        },
+    )
+    top_destination_ports = _find_nested(
+        rich,
+        {
+            "top_destination_ports", "destination_ports", "top_ports", "ports",
+        },
+    )
+    direction_totals = _find_nested(
+        rich,
+        {"traffic", "traffic_direction", "direction_totals", "directions"},
+    )
+
+    if top_destination_ips in (None, "", [], {}):
+        top_destination_ips = outbound
+    if top_destination_countries in (None, "", [], {}):
+        top_destination_countries = country_scores
+    if top_destination_services in (None, "", [], {}):
+        top_destination_services = policy_summary
+    if top_destination_ports in (None, "", [], {}):
+        top_destination_ports = port_heatmap
+
+    available_ages = [
+        value["age_seconds"]
+        for value in freshness.values()
+        if value.get("age_seconds") is not None
+    ]
+    newest_age = min(available_ages) if available_ages else None
+    fresh = newest_age is not None and newest_age <= 900
+
+    return {
+        "response_style": (
+            "Answer in at most six bullets. Separate traffic to the Internet "
+            "(outbound) from traffic from the Internet (inbound). Include total "
+            "events and top destination IP, country, service, and port when "
+            "available. State data age. Do not call the live FortiGate session "
+            "API and do not invent categories absent from the response."
+        ),
+        "source": "zabbix_collected_fortigate_soc",
+        "live_session_api_required": False,
+        "host": resolved,
+        "fresh": fresh,
+        "newest_data_age_seconds": newest_age,
+        "total_events": decoded.get("fortigate.total_events"),
+        "parse_errors": decoded.get("fortigate.parse_errors"),
+        "direction_totals": _compact_json(direction_totals),
+        "outbound": {
+            "top_destinations": _compact_json(outbound),
+            "top_destination_ips": _compact_json(top_destination_ips),
+            "top_destination_countries": _compact_json(top_destination_countries),
+            "top_destination_services": _compact_json(top_destination_services),
+            "top_destination_ports": _compact_json(top_destination_ports),
+            "grouped_destination_names": _compact_json(
+                decoded.get("fortigate.grouped_destination_names", [])
+            ),
+            "grouped_destination_owners": _compact_json(
+                decoded.get("fortigate.grouped_destination_owners", [])
+            ),
+        },
+        "inbound": {
+            "top_external_sources": _compact_json(inbound),
+            "denied_port_heatmap": _compact_json(port_heatmap),
+        },
+        "expected_vs_unexpected": _compact_json(
+            decoded.get("fortigate.expected_vs_unexpected", {})
+        ),
+        "ai_summary": decoded.get("fortigate.ollama.summary"),
+        "freshness": freshness,
+        "available_item_count": len(decoded),
+        "missing_keys": [key for key in keys if key not in decoded],
+    }
+
+
 def split_host_names(value: str) -> list[str]:
     normalized = value.replace(" and ", ",").replace(";", ",")
     return [part.strip() for part in normalized.split(",") if part.strip()][:5]
