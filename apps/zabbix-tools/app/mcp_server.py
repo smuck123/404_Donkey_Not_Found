@@ -237,6 +237,12 @@ async def get_fortigate_summary() -> dict[str, Any]:
 
 
 @mcp.tool()
+async def get_fortigate_performance() -> dict[str, Any]:
+    """Get live FortiGate sessions, setup rate, CPU and memory with short statistics."""
+    return await _get("/fortigate/performance-summary")
+
+
+@mcp.tool()
 async def get_fortigate_traffic(count: int = 500) -> dict[str, Any]:
     """Summarize current FortiGate sessions, top talkers, services and policies."""
     return await _get(
@@ -306,6 +312,7 @@ async def get_morning_report(
         try:
             traffic = {
                 "configuration": await _get("/fortigate/summary"),
+                "performance": await _get("/fortigate/performance-summary"),
                 "sessions": await _get(
                     "/fortigate/traffic-summary",
                     {"count": 500, "ip_version": "ipv4"},
