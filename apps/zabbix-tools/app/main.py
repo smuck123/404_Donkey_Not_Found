@@ -233,8 +233,6 @@ async def history(
         description="Zabbix value_type returned by item search",
     ),
     limit: int = Query(100, ge=1, le=1000),
-    hours: int = Query(24, ge=1, le=168),
-    item_key: str = "",
 ) -> dict[str, Any]:
     data = await ZabbixClient().call(
         "history.get",
@@ -264,6 +262,8 @@ async def read_zabbix(
     time_from: int | None = Query(None, ge=0),
     time_till: int | None = Query(None, ge=0),
     limit: int = Query(100, ge=1, le=1000),
+    hours: int = Query(24, ge=1, le=168),
+    item_key: str = "",
 ) -> dict[str, Any]:
     """Dispatch only explicitly allowlisted read operations."""
     if action == "capabilities":
