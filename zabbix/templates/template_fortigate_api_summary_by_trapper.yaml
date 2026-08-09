@@ -1,0 +1,408 @@
+zabbix_export:
+  version: '8.0'
+  template_groups:
+    - uuid: 6f3d2c1b9a8e4a7b8c9d0e1f2a3b4c5d
+      name: Templates/Custom
+  templates:
+    - uuid: a17c904b236a4c349a9a8214a0f74001
+      template: 'Template FortiGate API Summary by Trapper'
+      name: 'Template FortiGate API Summary by Trapper'
+      description: |
+        Read-only FortiGate device and performance monitoring.
+
+        The companion fortigate_api_summary.py collector runs on the Zabbix
+        server and sends one JSON value to fortigate.api.raw. Dependent items
+        extract current health and inventory values.
+
+        This template is intentionally separate from the Firewall AI SOC
+        syslog-flow template. It does not create or modify FortiGate
+        configuration.
+      groups:
+        - name: Templates/Custom
+      items:
+        - uuid: a17c904b236a4c349a9a8214a0f74002
+          name: 'FortiGate API: Raw summary JSON'
+          type: TRAP
+          key: fortigate.api.raw
+          history: 30d
+          value_type: JSON
+          allowed_hosts: '127.0.0.1,::1'
+          description: |
+            Master JSON payload sent by send_fortigate_api_summary.sh.
+            The payload contains no API token or configuration secrets.
+          tags:
+            - tag: class
+              value: firewall
+            - tag: component
+              value: raw
+            - tag: source
+              value: fortigate-api
+          triggers:
+            - uuid: a17c904b236a4c349a9a8214a0f74101
+              expression: 'nodata(/Template FortiGate API Summary by Trapper/fortigate.api.raw,15m)=1'
+              name: 'FortiGate API summary has no data for 15 minutes'
+              priority: WARNING
+              description: 'The Zabbix-server collector has not delivered a summary recently.'
+        - uuid: a17c904b236a4c349a9a8214a0f74003
+          name: 'FortiGate API: Collection status'
+          type: DEPENDENT
+          key: fortigate.api.collection_status
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.collection_status
+              error_handler: CUSTOM_VALUE
+              error_handler_params: failed
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: collector
+          triggers:
+            - uuid: a17c904b236a4c349a9a8214a0f74102
+              expression: 'last(/Template FortiGate API Summary by Trapper/fortigate.api.collection_status)<>"ok"'
+              name: 'FortiGate API summary collection is not healthy'
+              priority: WARNING
+        - uuid: a17c904b236a4c349a9a8214a0f74004
+          name: 'FortiGate API: Generated at'
+          type: DEPENDENT
+          key: fortigate.api.generated_at
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.generated_at
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: collector
+        - uuid: a17c904b236a4c349a9a8214a0f74005
+          name: 'FortiGate API: Device hostname'
+          type: DEPENDENT
+          key: fortigate.api.device.hostname
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.device.hostname
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: system
+        - uuid: a17c904b236a4c349a9a8214a0f74006
+          name: 'FortiGate API: Device model'
+          type: DEPENDENT
+          key: fortigate.api.device.model
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.device.model
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: system
+        - uuid: a17c904b236a4c349a9a8214a0f74007
+          name: 'FortiGate API: Serial number'
+          type: DEPENDENT
+          key: fortigate.api.device.serial
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.device.serial
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: system
+        - uuid: a17c904b236a4c349a9a8214a0f74008
+          name: 'FortiGate API: FortiOS version'
+          type: DEPENDENT
+          key: fortigate.api.device.version
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.device.version
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: system
+        - uuid: a17c904b236a4c349a9a8214a0f74009
+          name: 'FortiGate API: FortiOS build'
+          type: DEPENDENT
+          key: fortigate.api.device.build
+          value_type: UNSIGNED
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.device.build
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: system
+        - uuid: a17c904b236a4c349a9a8214a0f7400a
+          name: 'FortiGate API: Interfaces total'
+          type: DEPENDENT
+          key: fortigate.api.interfaces.total
+          value_type: UNSIGNED
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.interfaces.total
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: network
+        - uuid: a17c904b236a4c349a9a8214a0f7400b
+          name: 'FortiGate API: Interfaces up'
+          type: DEPENDENT
+          key: fortigate.api.interfaces.up
+          value_type: UNSIGNED
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.interfaces.up
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: network
+        - uuid: a17c904b236a4c349a9a8214a0f7400c
+          name: 'FortiGate API: Interfaces down'
+          type: DEPENDENT
+          key: fortigate.api.interfaces.down
+          value_type: UNSIGNED
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.interfaces.down
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: network
+        - uuid: a17c904b236a4c349a9a8214a0f7400d
+          name: 'FortiGate API: Down interface names JSON'
+          type: DEPENDENT
+          key: fortigate.api.interfaces.down_names
+          value_type: TEXT
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.interfaces.down_names
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: network
+        - uuid: a17c904b236a4c349a9a8214a0f7400e
+          name: 'FortiGate API: Firewall policies total'
+          type: DEPENDENT
+          key: fortigate.api.policies.total
+          value_type: UNSIGNED
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.policies.total
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: firewall
+        - uuid: a17c904b236a4c349a9a8214a0f7400f
+          name: 'FortiGate API: Firewall policies enabled'
+          type: DEPENDENT
+          key: fortigate.api.policies.enabled
+          value_type: UNSIGNED
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.policies.enabled
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: firewall
+        - uuid: a17c904b236a4c349a9a8214a0f74010
+          name: 'FortiGate API: Firewall policies disabled'
+          type: DEPENDENT
+          key: fortigate.api.policies.disabled
+          value_type: UNSIGNED
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.policies.disabled
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: firewall
+        - uuid: a17c904b236a4c349a9a8214a0f74011
+          name: 'FortiGate API: Static routes'
+          type: DEPENDENT
+          key: fortigate.api.routes.static_total
+          value_type: UNSIGNED
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.routes.static_total
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: network
+        - uuid: a17c904b236a4c349a9a8214a0f74012
+          name: 'FortiGate API: VPN phase 1 entries'
+          type: DEPENDENT
+          key: fortigate.api.vpn.phase1_total
+          value_type: UNSIGNED
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.vpn.phase1_total
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: vpn
+        - uuid: a17c904b236a4c349a9a8214a0f74013
+          name: 'FortiGate API: VPN phase 2 entries'
+          type: DEPENDENT
+          key: fortigate.api.vpn.phase2_total
+          value_type: UNSIGNED
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.vpn.phase2_total
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: vpn
+        - uuid: a17c904b236a4c349a9a8214a0f74014
+          name: 'FortiGate API: VPN configuration mismatch'
+          type: DEPENDENT
+          key: fortigate.api.vpn.configuration_mismatch
+          value_type: UNSIGNED
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.vpn.configuration_mismatch
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: vpn
+          triggers:
+            - uuid: a17c904b236a4c349a9a8214a0f74103
+              expression: 'last(/Template FortiGate API Summary by Trapper/fortigate.api.vpn.configuration_mismatch)=1'
+              name: 'FortiGate VPN phase configuration counts do not match'
+              priority: INFO
+        - uuid: a17c904b236a4c349a9a8214a0f74015
+          name: 'FortiGate API: Current sessions'
+          type: DEPENDENT
+          key: fortigate.api.performance.sessions
+          value_type: UNSIGNED
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.performance.session.current
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: performance
+        - uuid: a17c904b236a4c349a9a8214a0f74016
+          name: 'FortiGate API: Session setup rate'
+          type: DEPENDENT
+          key: fortigate.api.performance.setuprate
+          value_type: FLOAT
+          units: sessions/s
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.performance.setuprate.current
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: performance
+        - uuid: a17c904b236a4c349a9a8214a0f74017
+          name: 'FortiGate API: CPU utilization'
+          type: DEPENDENT
+          key: fortigate.api.performance.cpu
+          value_type: FLOAT
+          units: '%'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.performance.cpu.current
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: cpu
+          triggers:
+            - uuid: a17c904b236a4c349a9a8214a0f74104
+              expression: 'min(/Template FortiGate API Summary by Trapper/fortigate.api.performance.cpu,10m)>90'
+              name: 'FortiGate CPU utilization is above 90%'
+              priority: HIGH
+        - uuid: a17c904b236a4c349a9a8214a0f74018
+          name: 'FortiGate API: Memory utilization'
+          type: DEPENDENT
+          key: fortigate.api.performance.memory
+          value_type: FLOAT
+          units: '%'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.performance.mem.current
+              error_handler: CUSTOM_VALUE
+              error_handler_params: '0'
+          master_item:
+            key: fortigate.api.raw
+          tags:
+            - tag: component
+              value: memory
+          triggers:
+            - uuid: a17c904b236a4c349a9a8214a0f74105
+              expression: 'min(/Template FortiGate API Summary by Trapper/fortigate.api.performance.memory,10m)>85'
+              name: 'FortiGate memory utilization is above 85%'
+              priority: HIGH
