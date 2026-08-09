@@ -2,6 +2,7 @@ import json
 import os
 import time
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
@@ -11,6 +12,23 @@ from app.zabbix import ZabbixClient
 
 router = APIRouter(tags=["host analysis"])
 NUMERIC_VALUE_TYPES = {"0", "3"}
+
+
+def iso_age_seconds(value: Any) -> int | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return max(0, int((datetime.now(timezone.utc) - parsed.astimezone(timezone.utc)).total_seconds()))
+    except (TypeError, ValueError):
+        return None
+
+
+def item_age_seconds(item: dict[str, Any]) -> int | None:
+    raw = str(item.get("lastclock", ""))
+    return max(0, int(time.time()) - int(raw)) if raw.isdigit() and int(raw) > 0 else None
 
 
 async def find_hosts(search: str, limit: int = 10) -> list[dict[str, Any]]:
@@ -249,11 +267,18 @@ async def traffic_summary(
         processes = Counter(str(row.get("process", "unknown")) for row in entries)
         remote_ips = Counter(str(row.get("r_ip", "unknown")) for row in entries)
         remote_ports = Counter(str(row.get("r_port", "unknown")) for row in entries)
+        captured_at = payload.get("time")
+        payload_age = iso_age_seconds(captured_at)
         return {
             "schema": "connection_list",
             "host": resolved,
             "item": item_info,
-            "captured_at": payload.get("time"),
+            "freshness": {
+                "zabbix_item_age_seconds": item_age_seconds(selected),
+                "payload_age_seconds": payload_age,
+                "payload_stale": payload_age is not None and payload_age > 3600,
+            },
+            "captured_at": captured_at,
             "connections": len(entries),
             "top_processes": processes.most_common(10),
             "top_remote_ips": remote_ips.most_common(10),
@@ -262,17 +287,35 @@ async def traffic_summary(
         }
 
     if any(key in payload for key in ("deny_per_min", "top_attackers", "top_ports", "traffic")):
+        recent = payload.get("recent", [])
+        recent_times = [row.get("time") for row in recent if isinstance(row, dict) and row.get("time")]
+        newest_event_time = max(recent_times, default=None)
+        payload_age = iso_age_seconds(newest_event_time)
+        findings = []
+        if payload_age is not None and payload_age > 3600:
+            findings.append({
+                "severity": "warning",
+                "code": "stale_embedded_events",
+                "message": "The Zabbix item is updating, but the newest embedded FortiGate event is older than one hour.",
+            })
         return {
             "schema": "fortigate_aggregate",
             "host": resolved,
             "item": item_info,
+            "freshness": {
+                "zabbix_item_age_seconds": item_age_seconds(selected),
+                "newest_embedded_event_time": newest_event_time,
+                "embedded_event_age_seconds": payload_age,
+                "embedded_events_stale": payload_age is not None and payload_age > 3600,
+            },
+            "findings": findings,
             "deny_per_min": payload.get("deny_per_min"),
             "accept": payload.get("accept"),
             "close": payload.get("close"),
             "traffic": payload.get("traffic", {}),
             "top_attackers": payload.get("top_attackers", [])[:10],
             "top_ports": payload.get("top_ports", [])[:10],
-            "recent": payload.get("recent", [])[:15],
+            "recent": recent[:15],
         }
 
     return {
