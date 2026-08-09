@@ -1,0 +1,7 @@
+# Copy to /etc/sysconfig/404-donkey-log-summary and adjust for the environment.
+# This file contains no secrets.
+ZBX_SERVER="127.0.0.1"
+ZBX_HOST="zabbix.kivela.work"
+OLLAMA_URL="http://192.168.0.111:11434/api/chat"
+OLLAMA_MODEL="qwen3.5:9b"
+
