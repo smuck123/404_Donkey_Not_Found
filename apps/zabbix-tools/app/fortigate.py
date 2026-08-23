@@ -1,5 +1,6 @@
 import asyncio
 import os
+import socket
 from collections import Counter
 from typing import Any
 
@@ -385,6 +386,10 @@ async def fortigate_traffic_summary(
     services: Counter[str] = Counter()
     policies: Counter[str] = Counter()
     protocols: Counter[str] = Counter()
+    destination_ports: Counter[str] = Counter()
+    source_countries: Counter[str] = Counter()
+    destination_countries: Counter[str] = Counter()
+    destination_dns: dict[str, str] = {}
     total_bytes = 0
     shaper_drops = 0
 
@@ -393,6 +398,15 @@ async def fortigate_traffic_summary(
         destination = str(
             _pick(row, "daddr", "dst", "dstip", "dst_ip", default="unknown")
         )
+        source_country = str(_pick(
+            row, "srccountry", "src_country", "source_country", default=""
+        ))
+        destination_country = str(_pick(
+            row, "dstcountry", "dst_country", "destination_country", default=""
+        ))
+        reported_dns = str(_pick(
+            row, "dstname", "dst_name", "hostname", "domain", default=""
+        ))
         protocol = str(_pick(row, "proto", "protocol", default="unknown"))
         port = str(_pick(row, "dport", "dstport", "dst_port", default="unknown"))
         apps = row.get("apps")
@@ -403,7 +417,14 @@ async def fortigate_traffic_summary(
         sources[source] += 1
         destinations[destination] += 1
         protocols[protocol] += 1
+        destination_ports[port] += 1
         services[service] += 1
+        if source_country and source_country.lower() not in {"unknown", "reserved"}:
+            source_countries[source_country] += 1
+        if destination_country and destination_country.lower() not in {"unknown", "reserved"}:
+            destination_countries[destination_country] += 1
+        if reported_dns:
+            destination_dns[destination] = reported_dns
         policies[str(_pick(row, "policyid", "policy_id", "policy", default="unknown"))] += 1
         total_bytes += _integer(row.get("sentbyte")) + _integer(row.get("rcvdbyte"))
         shaper_drops += _integer(row.get("tx_shaper_drops")) + _integer(
@@ -412,6 +433,48 @@ async def fortigate_traffic_summary(
 
     def top(counter: Counter[str]) -> list[dict[str, Any]]:
         return [{"value": value, "sessions": amount} for value, amount in counter.most_common(10)]
+
+    async def reverse_dns(ip: str) -> tuple[str, str]:
+        if ip in destination_dns:
+            return ip, destination_dns[ip]
+        try:
+            result = await asyncio.wait_for(
+                asyncio.to_thread(socket.gethostbyaddr, ip),
+                timeout=1.0,
+            )
+            return ip, str(result[0])
+        except (OSError, TimeoutError, asyncio.TimeoutError):
+            return ip, ""
+
+    top_destination_rows = destinations.most_common(10)
+    resolved = await asyncio.gather(
+        *[reverse_dns(ip) for ip, _ in top_destination_rows]
+    )
+    resolved_by_ip = dict(resolved)
+    top_destinations_resolved = [
+        {
+            "ip": ip,
+            "dns": resolved_by_ip.get(ip) or None,
+            "display": resolved_by_ip.get(ip) or ip,
+            "sessions": amount,
+        }
+        for ip, amount in top_destination_rows
+    ]
+
+    def port_rows() -> list[dict[str, Any]]:
+        rows = []
+        for port, amount in destination_ports.most_common(10):
+            service_name = None
+            try:
+                service_name = socket.getservbyport(int(port))
+            except (OSError, ValueError):
+                pass
+            rows.append({
+                "port": port,
+                "service": service_name,
+                "sessions": amount,
+            })
+        return rows
 
     return {
         "read_only": True,
@@ -422,6 +485,11 @@ async def fortigate_traffic_summary(
         "shaper_drops_observed": shaper_drops,
         "top_sources": top(sources),
         "top_destinations": top(destinations),
+        "top_destinations_resolved": top_destinations_resolved,
+        "top_destination_countries": top(destination_countries),
+        "top_source_countries": top(source_countries),
+        "country_data_available": bool(source_countries or destination_countries),
+        "top_destination_ports": port_rows(),
         "top_services": top(services),
         "top_policies": top(policies),
         "top_protocols": top(protocols),
