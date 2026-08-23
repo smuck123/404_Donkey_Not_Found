@@ -56,6 +56,54 @@ services:
       start_period: 10s
 
 
+  general-tools:
+    build:
+      context: ./apps/general-tools
+    restart: unless-stopped
+    environment:
+      NEWS_FEEDS_FINLAND: ${NEWS_FEEDS_FINLAND:-}
+      NEWS_FEEDS_WORLD: ${NEWS_FEEDS_WORLD:-}
+      NEWS_FEEDS_TECHNOLOGY: ${NEWS_FEEDS_TECHNOLOGY:-}
+    ports:
+      - "127.0.0.1:8893:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  general-mcp:
+    build:
+      context: ./apps/general-tools
+    restart: unless-stopped
+    environment:
+      GENERAL_TOOLS_URL: http://general-tools:8000
+    depends_on:
+      general-tools:
+        condition: service_healthy
+    command:
+      - python
+      - -m
+      - app.mcp_server
+    ports:
+      - "127.0.0.1:8894:8001"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import socket; s=socket.create_connection(('127.0.0.1', 8001), 3); s.close()"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+
   fortigate-actions:
     profiles:
       - fortigate-write
@@ -112,6 +160,8 @@ services:
     init: true
     depends_on:
       zabbix-mcp:
+        condition: service_healthy
+      general-mcp:
         condition: service_healthy
     network_mode: host
     environment:
