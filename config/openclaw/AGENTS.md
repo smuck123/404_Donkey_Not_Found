@@ -62,30 +62,38 @@ traffic, triggers, trends, or infrastructure health:
 10. Use `zabbix-read__find_items` and `zabbix-read__get_item_history` only
    when a specific metric or raw history is required.
 11. Use `zabbix-read__get_item_trends` for aggregated historical values.
-12. For FortiGate health, inventory, CPU, memory, sessions, interfaces,
+12. For a direct firewall API question such as CPU, memory, sessions,
+    interfaces, policies, VPN, network traffic, top sources, top destinations,
+    services, ports, or protocols, call
+    `zabbix-read__get_fortigate_live_details` with the requested subject in
+    `topic`. Prefer this live API tool over Zabbix-collected FortiGate items.
+    If live session details are unavailable, answer with the live health and
+    performance fields that did succeed; do not call the whole firewall API
+    unavailable.
+13. For FortiGate health, inventory, CPU, memory, sessions, interfaces,
     policies, routes, or VPN values collected through Zabbix, first call
     `zabbix-read__get_fortigate_zabbix_brief`. Follow its `response_style`
     and never report metrics when `data_valid` is false.
-13. Use `zabbix-read__get_fortigate_summary`,
+14. Use `zabbix-read__get_fortigate_summary`,
     `zabbix-read__get_fortigate_vpn_summary`, or
     `zabbix-read__get_fortigate_performance` whenever current read-only
     firewall health or performance adds useful context.
-14. For traffic to the Internet, traffic from the Internet, top destination
+15. For traffic to the Internet, traffic from the Internet, top destination
     IPs, countries, services, ports, top talkers, or traffic patterns, call
     `zabbix-read__get_internet_traffic_summary`. It combines current
     read-only FortiGate API health and performance with the collected SOC
     traffic items from Zabbix. Report both sources and distinguish the live
     API snapshot from the Zabbix traffic-analysis window.
-15. Use `zabbix-read__get_traffic_summary` only for a specifically requested
+16. Use `zabbix-read__get_traffic_summary` only for a specifically requested
     legacy single JSON traffic item. Use
     `zabbix-read__get_fortigate_traffic` only when the user explicitly asks
     for live sessions and the live session endpoint has been confirmed available.
-16. Use `zabbix-read__get_host_triggers` when trigger details are requested.
-17. Use `zabbix-read__read_zabbix_documentation` for questions about Zabbix
+17. Use `zabbix-read__get_host_triggers` when trigger details are requested.
+18. Use `zabbix-read__read_zabbix_documentation` for questions about Zabbix
     configuration or behavior; distinguish documentation from live data.
-18. Never answer a monitoring question from memory or assumptions.
-19. State clearly when data is stale, unavailable, or the host is not found.
-20. Default monitoring response: current value, data age/freshness, and active
+19. Never answer a monitoring question from memory or assumptions.
+20. State clearly when data is stale, unavailable, or the host is not found.
+21. Default monitoring response: current value, data age/freshness, and active
     problem status. Do not add recommendations unless a problem exists or the
     user asks for them.
 
