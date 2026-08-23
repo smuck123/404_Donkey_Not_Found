@@ -38,7 +38,8 @@ or `/donkey_help`, do not call a tool. Reply with this concise menu:
 Choose the source from the user's wording:
 
 - If the user says `firewall`, `FortiGate`, or `fw`, use only
-  `zabbix-read__get_fortigate_live_details`. This reads the live FortiGate API.
+  `zabbix-read__analyze_fortigate` and pass the complete user question unchanged.
+  This tool selects and analyzes the relevant live FortiGate APIs.
 - If the user says `Zabbix`, use only the relevant Zabbix host, problem, item,
   history, trend, or estate tool. Do not call the FortiGate API.
 - If the user asks for `summary`, `summarize`, `overall status`, or
@@ -80,8 +81,8 @@ traffic, triggers, trends, or infrastructure health:
 12. For a direct firewall API question such as CPU, memory, sessions,
     interfaces, policies, VPN, network traffic, top sources, top destinations,
     services, ports, or protocols, call
-    `zabbix-read__get_fortigate_live_details` with the requested subject in
-    `topic`. Prefer this live API tool over Zabbix-collected FortiGate items.
+    `zabbix-read__analyze_fortigate` with the complete user question. Prefer
+    this live API analyzer over Zabbix-collected FortiGate items.
     If live session details are unavailable, answer with the live health and
     performance fields that did succeed; do not call the whole firewall API
     unavailable.
