@@ -597,8 +597,9 @@ async def fortigate_live_details(
         "response_style": (
             "Answer the requested firewall detail first in at most five bullets. "
             "Report current, average, minimum, and maximum when present. For top "
-            "traffic, list the returned sources, destinations, services, policies, "
-            "and protocols. If session details are unavailable, still report live "
+            "traffic, list returned DNS names, IPs, countries, ports, services, "
+            "policies, and protocols. If country or DNS data is absent, say so "
+            "briefly. If session details are unavailable, still report live "
             "CPU, memory, session count, and firewall health. Never invent values."
         ),
         "topic": normalized,
