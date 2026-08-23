@@ -510,7 +510,10 @@ async def fortigate_live_details(
         "read_only": True,
         "overall_status": overall_status,
         "selected": selected,
-        "live_health": health,
-        "live_performance": performance,
-        "live_traffic": traffic,
+        "live_traffic": traffic if wants_traffic else None,
+        "source_errors": {
+            "health": health.get("error"),
+            "performance": performance.get("error"),
+            "traffic": traffic.get("error"),
+        },
     }
