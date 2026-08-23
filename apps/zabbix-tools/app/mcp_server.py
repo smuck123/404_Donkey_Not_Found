@@ -272,6 +272,19 @@ async def _estate_summary(limit: int = 500) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def get_fortigate_live_details(
+    topic: str = "all",
+    count: int = 200,
+) -> dict[str, Any]:
+    """Get compact live FortiGate CPU, memory, sessions, interfaces, policies, VPN, or top traffic."""
+    return await _read(
+        "fortigate_live",
+        query=topic.strip() or "all",
+        limit=max(1, min(count, 1000)),
+    )
+
+
+@mcp.tool()
 async def get_fortigate_zabbix_brief(
     host: str = "fw1.kivela.work",
 ) -> dict[str, Any]:
