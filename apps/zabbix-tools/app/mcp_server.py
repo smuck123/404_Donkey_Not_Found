@@ -285,6 +285,22 @@ async def get_fortigate_live_details(
 
 
 @mcp.tool()
+async def get_combined_status() -> dict[str, Any]:
+    """Get a compact overall status containing both Zabbix and live FortiGate API data."""
+    estate = await _estate_summary()
+    firewall = await _read("fortigate_live", query="all", limit=100)
+    return {
+        "response_style": (
+            "Summarize both sources in at most six bullets. Label Zabbix and "
+            "FortiGate separately. Start with active problems or unavailable "
+            "components. Do not mix Zabbix values with live firewall values."
+        ),
+        "zabbix": estate,
+        "fortigate": firewall,
+    }
+
+
+@mcp.tool()
 async def get_fortigate_zabbix_brief(
     host: str = "fw1.kivela.work",
 ) -> dict[str, Any]:
