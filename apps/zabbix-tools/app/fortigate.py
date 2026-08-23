@@ -613,3 +613,203 @@ async def fortigate_live_details(
             "traffic": traffic.get("error"),
         },
     }
+
+
+@router.get(
+    "/analyze",
+    operation_id="analyze_fortigate",
+    summary="Analyze a natural-language FortiGate question using live APIs",
+    description=(
+        "Interpret a firewall question, call only the relevant live read-only "
+        "FortiGate APIs, and return compact facts and findings. Supports health, "
+        "CPU, memory, sessions, interfaces, policies, routes, VPN, top traffic, "
+        "DNS names, countries, ports, services, protocols, sources and destinations."
+    ),
+)
+async def analyze_fortigate(
+    question: str = Query(..., min_length=1, max_length=500),
+    count: int = Query(500, ge=10, le=5000),
+) -> dict[str, Any]:
+    query = question.strip().lower()
+    resource_words = {"cpu", "memory", "mem", "ram", "session", "sessions", "load", "performance"}
+    traffic_words = {
+        "traffic", "top", "country", "countries", "dns", "domain", "ip",
+        "port", "service", "protocol", "source", "destination", "talker",
+        "internet", "device",
+    }
+    config_words = {
+        "health", "status", "interface", "interfaces", "policy", "policies",
+        "rule", "rules", "route", "routes", "vpn", "device", "model", "version",
+    }
+    tokens = set(query.replace(",", " ").replace("?", " ").split())
+    broad = (
+        query in {"fw", "show fw", "firewall", "show firewall"}
+        or any(word in query for word in ("summary", "summarize", "overall", "everything"))
+    )
+    wants_resources = broad or bool(tokens & resource_words)
+    wants_traffic = broad or bool(tokens & traffic_words)
+    wants_config = broad or bool(tokens & config_words)
+    if not (wants_resources or wants_traffic or wants_config):
+        wants_config = wants_resources = True
+
+    async def capture(awaitable: Any) -> dict[str, Any]:
+        try:
+            return {"available": True, "data": await awaitable}
+        except Exception as exc:
+            return {
+                "available": False,
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+            }
+
+    tasks: dict[str, Any] = {}
+    if wants_config:
+        tasks["configuration"] = capture(fortigate_summary())
+    if wants_resources:
+        tasks["performance"] = capture(fortigate_performance_summary())
+    if wants_traffic:
+        tasks["traffic"] = capture(
+            fortigate_traffic_summary(count=count, ip_version="ipv4")
+        )
+    if "policy" in query or "policies" in query or "rule" in query:
+        tasks["policy_details"] = capture(_named("policies"))
+
+    names = list(tasks)
+    values = await asyncio.gather(*tasks.values())
+    sections = dict(zip(names, values))
+    facts: dict[str, Any] = {}
+    findings: list[dict[str, str]] = []
+
+    configuration = sections.get("configuration", {})
+    if configuration.get("available"):
+        config_data = configuration["data"]
+        facts["device"] = config_data.get("device")
+        facts["interfaces"] = config_data.get("interfaces")
+        facts["firewall_policies"] = config_data.get("firewall_policies")
+        facts["static_routes"] = config_data.get("static_routes")
+        facts["vpn"] = config_data.get("vpn")
+        down = config_data.get("interfaces", {}).get("down", [])
+        if down:
+            findings.append({
+                "severity": "warning",
+                "code": "interfaces_down",
+                "message": "One or more firewall interfaces are down.",
+            })
+        if config_data.get("vpn", {}).get("configuration_count_mismatch"):
+            findings.append({
+                "severity": "warning",
+                "code": "vpn_configuration_mismatch",
+                "message": "IPsec phase 1 and phase 2 configuration counts differ.",
+            })
+
+    performance = sections.get("performance", {})
+    if performance.get("available"):
+        resources = performance["data"].get("resources", {})
+        facts["performance"] = resources
+        cpu = resources.get("cpu", {}).get("current")
+        memory = resources.get("mem", {}).get("current")
+        sessions = resources.get("session", {}).get("current")
+        if isinstance(cpu, (int, float)) and cpu >= 80:
+            findings.append({
+                "severity": "warning",
+                "code": "high_cpu",
+                "message": f"Current firewall CPU utilization is {cpu}%.",
+            })
+        if isinstance(memory, (int, float)) and memory >= 85:
+            findings.append({
+                "severity": "warning",
+                "code": "high_memory",
+                "message": f"Current firewall memory utilization is {memory}%.",
+            })
+        if isinstance(sessions, (int, float)) and sessions >= 5000:
+            findings.append({
+                "severity": "warning",
+                "code": "high_session_count",
+                "message": f"Current firewall session count is {sessions}.",
+            })
+
+    traffic = sections.get("traffic", {})
+    if traffic.get("available"):
+        traffic_data = traffic["data"]
+        facts["traffic"] = {
+            key: traffic_data.get(key)
+            for key in (
+                "api_path", "sessions_analyzed", "total_bytes_observed",
+                "shaper_drops_observed", "top_sources", "top_destinations_resolved",
+                "top_destination_countries", "top_source_countries",
+                "country_data_available", "top_destination_ports", "top_services",
+                "top_policies", "top_protocols", "truncated",
+            )
+        }
+        if _integer(traffic_data.get("shaper_drops_observed")) > 0:
+            findings.append({
+                "severity": "warning",
+                "code": "traffic_shaper_drops",
+                "message": "Traffic-shaper drops were observed in the sampled sessions.",
+            })
+        if traffic_data.get("truncated"):
+            findings.append({
+                "severity": "info",
+                "code": "traffic_sample_truncated",
+                "message": f"Traffic analysis is limited to {count} live sessions.",
+            })
+
+    policy_section = sections.get("policy_details", {})
+    if policy_section.get("available"):
+        policies = _rows(policy_section["data"])
+        terms = [
+            token for token in tokens
+            if token.isdigit() or len(token) >= 3
+        ]
+        matched = []
+        for policy in policies:
+            policy_id = str(_pick(policy, "policyid", "id", default=""))
+            policy_name = str(policy.get("name", ""))
+            if not terms or any(
+                term == policy_id or term in policy_name.lower()
+                for term in terms
+            ):
+                matched.append({
+                    "policyid": policy_id,
+                    "name": policy_name,
+                    "status": policy.get("status"),
+                    "action": policy.get("action"),
+                    "srcintf": policy.get("srcintf"),
+                    "dstintf": policy.get("dstintf"),
+                    "srcaddr": policy.get("srcaddr"),
+                    "dstaddr": policy.get("dstaddr"),
+                    "service": policy.get("service"),
+                    "nat": policy.get("nat"),
+                })
+        facts["matching_policies"] = matched[:20]
+
+    unavailable = {
+        name: section.get("error")
+        for name, section in sections.items()
+        if not section.get("available")
+    }
+    available_count = sum(
+        1 for section in sections.values() if section.get("available")
+    )
+    if available_count == len(sections):
+        overall_status = "ok"
+    elif available_count:
+        overall_status = "partial"
+    else:
+        overall_status = "unavailable"
+
+    return {
+        "response_style": (
+            "Answer the exact firewall question first. Default to at most six "
+            "bullets. Prefer DNS names but retain IP addresses. Include countries, "
+            "ports, services, policies, protocols, and data limits only when "
+            "relevant. Separate warnings from normal facts. Never invent missing data."
+        ),
+        "question": question,
+        "read_only": True,
+        "overall_status": overall_status,
+        "queried_sections": names,
+        "facts": facts,
+        "findings": findings,
+        "unavailable_sections": unavailable,
+    }
