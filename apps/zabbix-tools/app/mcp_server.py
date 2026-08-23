@@ -272,6 +272,21 @@ async def _estate_summary(limit: int = 500) -> dict[str, Any]:
 
 
 @mcp.tool()
+async def analyze_fortigate(
+    question: str,
+    count: int = 500,
+) -> dict[str, Any]:
+    """Analyze a firewall question using relevant live FortiGate APIs and compact findings."""
+    return await _get(
+        "/fortigate/analyze",
+        {
+            "question": question,
+            "count": max(10, min(count, 5000)),
+        },
+    )
+
+
+@mcp.tool()
 async def get_fortigate_live_details(
     topic: str = "all",
     count: int = 200,
