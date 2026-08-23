@@ -492,6 +492,12 @@ async def fortigate_live_details(
         }
 
     available = health.get("available") or performance.get("available")
+    if not available:
+        overall_status = "unavailable"
+    elif wants_traffic and not traffic.get("available"):
+        overall_status = "partial"
+    else:
+        overall_status = "ok"
     return {
         "response_style": (
             "Answer the requested firewall detail first in at most five bullets. "
@@ -502,7 +508,7 @@ async def fortigate_live_details(
         ),
         "topic": normalized,
         "read_only": True,
-        "overall_status": "ok" if available else "unavailable",
+        "overall_status": overall_status,
         "selected": selected,
         "live_health": health,
         "live_performance": performance,
