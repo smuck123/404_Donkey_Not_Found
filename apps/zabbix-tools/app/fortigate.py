@@ -757,9 +757,13 @@ async def analyze_fortigate(
     policy_section = sections.get("policy_details", {})
     if policy_section.get("available"):
         policies = _rows(policy_section["data"])
+        policy_stop_words = {
+            "show", "list", "firewall", "fortigate", "policy", "policies",
+            "rule", "rules", "details", "about", "what", "which", "status", "fw",
+        }
         terms = [
             token for token in tokens
-            if token.isdigit() or len(token) >= 3
+            if token.isdigit() or (len(token) >= 3 and token not in policy_stop_words)
         ]
         matched = []
         for policy in policies:
