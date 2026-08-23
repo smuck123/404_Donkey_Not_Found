@@ -348,11 +348,36 @@ async def fortigate_traffic_summary(
     count: int = Query(500, ge=1, le=5000),
     ip_version: str = Query("ipv4", pattern=r"^(ipv4|ipv6)$"),
 ) -> dict[str, Any]:
-    _, _, _, _, traffic_path = _settings()
-    payload = await _request(
-        traffic_path,
-        {"start": 0, "count": count, "ip_version": ip_version},
-    )
+    _, _, _, _, configured_path = _settings()
+    candidate_paths = list(dict.fromkeys([
+        configured_path,
+        "/api/v2/monitor/firewall/sessions",
+        "/api/v2/monitor/firewall/session/select",
+        "/api/v2/monitor/firewall/session",
+    ]))
+    payload: Any = None
+    selected_path = ""
+    endpoint_errors: dict[str, str] = {}
+    for traffic_path in candidate_paths:
+        try:
+            payload = await _request(
+                traffic_path,
+                {
+                    "start": 0,
+                    "count": count,
+                    "ip_version": ip_version,
+                    "summary": "true",
+                },
+            )
+            selected_path = traffic_path
+            break
+        except FortiGateAPIError as exc:
+            endpoint_errors[traffic_path] = str(exc)
+    if payload is None:
+        raise FortiGateAPIError(
+            "FortiGate session API is unavailable on all supported endpoints: "
+            + "; ".join(f"{path}: {error}" for path, error in endpoint_errors.items())
+        )
     sessions = _rows(payload)[:count]
 
     sources: Counter[str] = Counter()
@@ -390,6 +415,8 @@ async def fortigate_traffic_summary(
 
     return {
         "read_only": True,
+        "api_path": selected_path,
+        "endpoint_fallback_errors": endpoint_errors,
         "sessions_analyzed": len(sessions),
         "total_bytes_observed": total_bytes,
         "shaper_drops_observed": shaper_drops,
