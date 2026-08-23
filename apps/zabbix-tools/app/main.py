@@ -132,7 +132,7 @@ async def combined_internet_traffic_summary(host: str) -> dict[str, Any]:
     health, performance, live_sessions, zabbix_traffic = await asyncio.gather(
         capture(fortigate_summary()),
         capture(fortigate_performance_summary()),
-        capture(fortigate_traffic_summary()),
+        capture(fortigate_traffic_summary(count=500, ip_version="ipv4")),
         capture(internet_traffic_summary(host=host)),
     )
 
