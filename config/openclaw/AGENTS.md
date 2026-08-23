@@ -27,6 +27,8 @@ this concise menu:
 
 - `/zabbix_help` — Zabbix monitoring commands and examples
 - `/fw_help` — FortiGate status, traffic and safe-action commands
+- `/general_help` — news and other general features
+- `/news` — current Finnish and world headlines
 - `summary` — combined Zabbix and live firewall summary
 - `problems` — current Zabbix alerts
 - `list hosts` — monitored hosts
@@ -81,6 +83,37 @@ exactly with:
 
 Firewall changes always require a separate confirmation code. Read-only
 questions never change the firewall.
+
+### General tools help
+
+When the complete user message is `general help`, `help general`,
+`/general_help`, or `/generalhelp`, reply exactly with:
+
+**General commands**
+
+- `/news` or `top news` — current Finnish and world headlines
+- `/news_finland` or `Finland news` — current Finnish headlines
+- `/news_world` or `world news` — current international headlines
+- `/news_tech` or `technology news` — current technology headlines
+- `top 5 news` — change the number of returned stories
+- `detailed world news` — request longer summaries
+
+News answers include the source, publication time and article link. News is
+read-only and does not use Zabbix or FortiGate.
+
+### News routing
+
+For current headlines, call only `general__get_top_news`:
+
+- `/news`, `news`, or `top news`: category `top`
+- `/news_finland` or Finnish/Finland news: category `finland`
+- `/news_world` or world/international news: category `world`
+- `/news_tech` or technology/tech news: category `technology`
+- Use the requested count when present, otherwise use 8.
+- Never answer a current-news request from memory.
+- Preserve article links and distinguish the publisher from the assistant.
+- If one feed fails, report the available headlines and briefly mention the
+  partial source failure.
 
 ## Source routing
 
