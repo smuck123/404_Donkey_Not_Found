@@ -301,17 +301,38 @@ async def get_fortigate_live_details(
 
 @mcp.tool()
 async def get_combined_status() -> dict[str, Any]:
-    """Get a compact overall status containing both Zabbix and live FortiGate API data."""
-    estate = await _estate_summary()
-    firewall = await _read("fortigate_live", query="all", limit=100)
+    """Get a compact overall status from Zabbix and live FortiGate independently."""
+    sources: dict[str, Any] = {}
+    errors: dict[str, str] = {}
+
+    try:
+        sources["zabbix"] = await _estate_summary()
+    except (httpx.HTTPError, ValueError) as exc:
+        errors["zabbix"] = str(exc)
+
+    try:
+        sources["fortigate"] = await _read(
+            "fortigate_live",
+            query="all",
+            limit=100,
+        )
+    except (httpx.HTTPError, ValueError) as exc:
+        errors["fortigate"] = str(exc)
+
     return {
         "response_style": (
-            "Summarize both sources in at most six bullets. Label Zabbix and "
-            "FortiGate separately. Start with active problems or unavailable "
-            "components. Do not mix Zabbix values with live firewall values."
+            "Summarize available sources in at most six bullets. Label Zabbix "
+            "and FortiGate separately. Start with active problems. If one source "
+            "failed, still answer from the other and mention the failure once."
         ),
-        "zabbix": estate,
-        "fortigate": firewall,
+        "overall_status": (
+            "ok" if len(sources) == 2
+            else "partial" if sources
+            else "unavailable"
+        ),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "sources": sources,
+        "errors": errors,
     }
 
 
