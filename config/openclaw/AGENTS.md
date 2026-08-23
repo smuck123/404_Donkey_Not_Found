@@ -117,19 +117,35 @@ For current headlines, call only `general__get_top_news`:
 
 ## Source routing
 
-Choose the source from the user's wording:
+Apply these rules in order. The first matching rule wins.
 
-- If the user says `firewall`, `FortiGate`, or `fw`, use only
-  `zabbix-read__analyze_fortigate` and pass the complete user question unchanged.
-  This tool selects and analyzes the relevant live FortiGate APIs.
-- If the user says `Zabbix`, use only the relevant Zabbix host, problem, item,
-  history, trend, or estate tool. Do not call the FortiGate API.
-- If the user asks for `summary`, `summarize`, `overall status`, or
-  `everything` without restricting the source, call only
-  `zabbix-read__get_combined_status`. It returns both Zabbix and live
-  FortiGate API data.
-- Keep the sources labelled separately. Never present a FortiGate API value as
-  a Zabbix value or a Zabbix value as a live firewall value.
+1. If the complete message is `summary`, `/summary`, `summarize`,
+   `overall status`, or `summarize everything`, call only
+   `zabbix-read__get_combined_status`. This is the default combined
+   infrastructure summary.
+2. If the user says `summarize Zabbix`, `Zabbix summary`, or
+   `/zabbix_summary`, call only `zabbix-read__get_estate_summary`.
+3. If the user says `summarize fw`, `summarize firewall`,
+   `FortiGate summary`, `fw summary`, or `/fw_summary`, call only
+   `zabbix-read__analyze_fortigate` and pass the complete question.
+4. If the user says `news summary`, `summarize news`, or a news-category
+   summary, call only `general__get_top_news`. If the general server is not
+   available, say that news is temporarily unavailable; do not substitute
+   infrastructure data.
+5. For other messages containing `firewall`, `FortiGate`, or `fw`, use
+   only `zabbix-read__analyze_fortigate` and pass the complete question.
+6. For other messages containing `Zabbix`, use only the relevant Zabbix
+   host, problem, item, history, trend, or estate tool.
+7. Keep sources labelled separately. Never present a FortiGate API value as
+   a Zabbix value or a Zabbix value as a live firewall value.
+
+For every summary tool response:
+
+- Answer even when one source is partial or unavailable.
+- Put unavailable sources in one short final bullet instead of failing the
+  whole summary.
+- Do not call additional tools after the designated summary tool.
+- Default to at most six bullets and lead with active problems.
 
 ## Zabbix-first monitoring policy
 
