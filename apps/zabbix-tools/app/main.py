@@ -18,6 +18,7 @@ from app.fortigate import (
     FortiGateConfigurationError,
     fortigate_performance_summary,
     fortigate_summary,
+    fortigate_traffic_summary,
     router as fortigate_router,
 )
 from app.host_analysis import (
@@ -116,6 +117,72 @@ def normalize_item(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def combined_internet_traffic_summary(host: str) -> dict[str, Any]:
+    """Combine live FortiGate API data with optional Zabbix-collected traffic."""
+    async def capture(awaitable: Any) -> dict[str, Any]:
+        try:
+            return {"available": True, "data": await awaitable}
+        except Exception as exc:
+            return {
+                "available": False,
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+            }
+
+    health, performance, live_sessions, zabbix_traffic = await asyncio.gather(
+        capture(fortigate_summary()),
+        capture(fortigate_performance_summary()),
+        capture(fortigate_traffic_summary()),
+        capture(internet_traffic_summary(host=host)),
+    )
+
+    live_available = health["available"] or performance["available"]
+    zabbix_available = zabbix_traffic["available"]
+    if live_available and zabbix_available:
+        overall_status = "ok"
+    elif live_available or zabbix_available:
+        overall_status = "partial"
+    else:
+        overall_status = "unavailable"
+
+    warnings: list[str] = []
+    if not zabbix_available:
+        warnings.append(
+            "Zabbix-collected traffic is unavailable; live FortiGate API data is still valid."
+        )
+    if not live_sessions["available"]:
+        warnings.append(
+            "The FortiGate session-detail endpoint is unavailable; health and "
+            "performance data may still be current."
+        )
+    if not live_available:
+        warnings.append("Live FortiGate health and performance APIs are unavailable.")
+
+    return {
+        "response_style": (
+            "Answer the user's traffic question first in at most six bullets. "
+            "Use live FortiGate health and performance even when Zabbix is unavailable. "
+            "Clearly distinguish live API data from Zabbix-collected traffic. "
+            "Call the result partial, not unavailable, when either source works. "
+            "Do not invent destinations, countries, services, or ports."
+        ),
+        "overall_status": overall_status,
+        "read_only": True,
+        "source_availability": {
+            "live_fortigate_api": live_available,
+            "live_session_details": live_sessions["available"],
+            "zabbix_collected_traffic": zabbix_available,
+        },
+        "warnings": warnings,
+        "live_fortigate": {
+            "health": health,
+            "performance": performance,
+            "sessions": live_sessions,
+        },
+        "zabbix_collected_traffic": zabbix_traffic,
+    }
+
+
 @app.get("/health", include_in_schema=False)
 async def health() -> dict[str, str]:
     return {"status": "ok"}
@@ -155,7 +222,7 @@ async def openwebui_context(
         capture("fortigate_performance", fortigate_performance_summary()),
         capture(
             "internet_traffic",
-            internet_traffic_summary(host=firewall_host),
+            combined_internet_traffic_summary(host=firewall_host),
         ),
     )
     sections = dict(collected)
@@ -541,7 +608,7 @@ async def read_zabbix(
     if action == "traffic_summary":
         return await traffic_summary(host=query or hostid, item_key=item_key)
     if action == "internet_traffic_summary":
-        return await internet_traffic_summary(host=query or "fw1.kivela.work")
+        return await combined_internet_traffic_summary(host=query or "fw1.kivela.work")
     if action == "fortigate_api_brief":
         return await fortigate_api_brief(host=query or "fw1.kivela.work")
     if action == "hosts":
