@@ -400,3 +400,111 @@ async def fortigate_traffic_summary(
         "top_protocols": top(protocols),
         "truncated": len(sessions) >= count,
     }
+
+
+@router.get(
+    "/live-details",
+    operation_id="get_fortigate_live_details",
+    summary="Get live FortiGate details by topic",
+    description=(
+        "Read current FortiGate API data for CPU, memory, sessions, interfaces, "
+        "policies, routes, VPNs, or top live traffic. The topic may be cpu, "
+        "memory, sessions, network, traffic, top, interfaces, policies, vpn, "
+        "health, or all. This operation is read-only."
+    ),
+)
+async def fortigate_live_details(
+    topic: str = Query(
+        "all",
+        min_length=1,
+        max_length=40,
+        description="Requested live firewall detail, for example cpu or top traffic",
+    ),
+    count: int = Query(500, ge=1, le=5000),
+) -> dict[str, Any]:
+    normalized = topic.strip().lower()
+    wants_traffic = any(
+        word in normalized
+        for word in ("traffic", "top", "session", "network", "source", "destination")
+    )
+
+    async def capture(awaitable: Any) -> dict[str, Any]:
+        try:
+            return {"available": True, "data": await awaitable}
+        except Exception as exc:
+            return {
+                "available": False,
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+            }
+
+    health_task = capture(fortigate_summary())
+    performance_task = capture(fortigate_performance_summary())
+    if wants_traffic:
+        health, performance, traffic = await asyncio.gather(
+            health_task,
+            performance_task,
+            capture(fortigate_traffic_summary(count=count, ip_version="ipv4")),
+        )
+    else:
+        health, performance = await asyncio.gather(health_task, performance_task)
+        traffic = {
+            "available": False,
+            "not_requested": True,
+            "message": "Live session details were not requested for this topic.",
+        }
+
+    resources = (
+        performance.get("data", {}).get("resources", {})
+        if performance.get("available")
+        else {}
+    )
+    selected: dict[str, Any] = {}
+    if normalized in {"cpu", "processor"}:
+        selected["cpu"] = resources.get("cpu")
+    elif normalized in {"memory", "mem", "ram"}:
+        selected["memory"] = resources.get("mem")
+    elif normalized in {"session", "sessions"}:
+        selected["sessions"] = resources.get("session")
+        selected["session_setup_rate"] = resources.get("setuprate")
+    elif normalized in {"interfaces", "interface", "network"}:
+        selected["interfaces"] = (
+            health.get("data", {}).get("interfaces")
+            if health.get("available")
+            else None
+        )
+    elif normalized in {"policies", "policy", "rules"}:
+        selected["firewall_policies"] = (
+            health.get("data", {}).get("firewall_policies")
+            if health.get("available")
+            else None
+        )
+    elif normalized in {"vpn", "vpns"}:
+        selected["vpn"] = (
+            health.get("data", {}).get("vpn")
+            if health.get("available")
+            else None
+        )
+    else:
+        selected = {
+            "health": health.get("data") if health.get("available") else None,
+            "resources": resources,
+        }
+
+    available = health.get("available") or performance.get("available")
+    return {
+        "response_style": (
+            "Answer the requested firewall detail first in at most five bullets. "
+            "Report current, average, minimum, and maximum when present. For top "
+            "traffic, list the returned sources, destinations, services, policies, "
+            "and protocols. If session details are unavailable, still report live "
+            "CPU, memory, session count, and firewall health. Never invent values."
+        ),
+        "topic": normalized,
+        "read_only": True,
+        "overall_status": "ok" if available else "unavailable",
+        "selected": selected,
+        "live_health": health,
+        "live_performance": performance,
+        "live_traffic": traffic,
+    }
