@@ -33,6 +33,21 @@ or `/donkey_help`, do not call a tool. Reply with this concise menu:
 “24-hour CPU summary for himabot”, “block <public-ip> inbound”,
 “unblock <public-ip> inbound”, or “list monitored hosts”.
 
+## Source routing
+
+Choose the source from the user's wording:
+
+- If the user says `firewall`, `FortiGate`, or `fw`, use only
+  `zabbix-read__get_fortigate_live_details`. This reads the live FortiGate API.
+- If the user says `Zabbix`, use only the relevant Zabbix host, problem, item,
+  history, trend, or estate tool. Do not call the FortiGate API.
+- If the user asks for `summary`, `summarize`, `overall status`, or
+  `everything` without restricting the source, call only
+  `zabbix-read__get_combined_status`. It returns both Zabbix and live
+  FortiGate API data.
+- Keep the sources labelled separately. Never present a FortiGate API value as
+  a Zabbix value or a Zabbix value as a live firewall value.
+
 ## Zabbix-first monitoring policy
 
 This policy applies to monitoring and read-only information requests. An
